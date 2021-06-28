@@ -104,7 +104,7 @@ module Jekyll
       def self.sort_get_post_data(post_data, sort_field)
         
         # Begin by splitting up the sort_field by (;,:.)
-        sort_split = sort_field.split(":")
+        sort_split = sort_field.split(/[:.]+/)
         sort_value = post_data
 
         sort_split.each do |r_key|
