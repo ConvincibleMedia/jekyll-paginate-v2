@@ -293,10 +293,11 @@ module Jekyll
           first_index_page_url = ""
           if template.data['permalink']
             first_index_page_url = Utils.ensure_trailing_slash(template.data['permalink'])
+            paginated_page_url = File.join(first_index_page_url, paginated_page_url)
           else
-            first_index_page_url = Utils.ensure_trailing_slash(template.dir)
+            first_index_page_url = File.join(template.dir, template.basename)
+            paginated_page_url = File.join(template.dir, template.basename, paginated_page_url)
           end
-          paginated_page_url = File.join(first_index_page_url, paginated_page_url)
           
           # 3. Create the pager logic for this page, pass in the prev and next page numbers, assign pager to in-memory page
           newpage.pager = Paginator.new( config['per_page'], first_index_page_url, paginated_page_url, using_posts, cur_page_nr, total_pages, indexPageName, indexPageExt)
