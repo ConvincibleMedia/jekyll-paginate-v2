@@ -38,6 +38,11 @@ module Jekyll
         # Map the first page back to the source file path, to play nice with other plugins
         self.data['path'] = page_to_copy.path if cur_page_nr == 1
 
+        if page_to_copy.respond_to?(:collection)
+          @collection = page_to_copy.collection
+          self.data['collection'] = @collection.label
+        end
+
         # Perform some validation that is also performed in Jekyll::Page
         validate_data! page_to_copy.path
         validate_permalink! page_to_copy.path
