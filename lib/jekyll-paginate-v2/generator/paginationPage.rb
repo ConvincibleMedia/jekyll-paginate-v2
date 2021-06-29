@@ -33,7 +33,7 @@ module Jekyll
         self.data['pagination_info'] = {"curr_page" => cur_page_nr, 'total_pages' => total_pages }       
 
         # Retain the extention so the page exists in site.html_pages
-        self.ext = page_to_copy.ext
+        self.ext = page_to_copy.extname
         
         # Map the first page back to the source file path, to play nice with other plugins
         self.data['path'] = page_to_copy.path if cur_page_nr == 1
