@@ -22,7 +22,7 @@ module Jekyll
 
 
       def run(default_config, site_pages, site_title)
-        @logging_lambda.call "Using ConvincibleMedia fork of jekyll-paginate-v2", "warn"
+        @logging_lambda.call "Using ConvincibleMedia fork of jekyll-paginate-v2 in dev branch", "warn"
         # By default if pagination is enabled we attempt to find all index.html pages in the site
         templates = self.discover_paginate_templates(site_pages)
         if( templates.size.to_i <= 0 )
