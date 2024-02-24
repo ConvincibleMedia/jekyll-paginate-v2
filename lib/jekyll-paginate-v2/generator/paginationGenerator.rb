@@ -61,17 +61,28 @@ module Jekyll
         Jekyll.logger.debug "Pagination:","Starting"
 
         ################ 0 ####################
-        # Get the types of pages/docs to look over.
-        # Specified as 'type' => ['path', 'path']
-        # type is either 'pages' or a collection name
-        # User can also specify 'all' or 'collections' to mean all collections
-        # In addition, selected pages/docs must begin with at least one of 'path'
-        # 'path' can contain * as a wildcard
+        # Set up which documents within the site will be searched to find Pagination Templates.
+        # By default, Paginator looks through all Pages
+        # Where the Paginator looks can be controlled with the 'search' configuration key
+        # Specified as:
+        # search:
+        #   type: 'path'
+        # where 'type' is either 'pages', a collection name, or 'all' or 'collections' to mean all collections
+        # and 'path' is either a string or an array of strings, which specify the paths to look through, and may contain wildcards (*). Pagination templates will only be found in paths that begin with 'path'.
+        # Examples:
+        #   pages: '*' # default - look through all pages, in any path
+        #   photos: 'featured' # look through photos collection in the 'featured' folder
+        #   photos: 'best_of_*' # look through photos collection in any folder whose name begins with 'best_of_', e.g. 'best_of_2022', 'best_of_2023'
+
+        # Construct the search hash
+        # Each key is a place to search through (pages, posts, collection name)
+        # The value is an array of paths
         search = Hash.new { |hash, key| hash[key] = [] }
 
         # Load the search list
         list = default_config['search']
         
+        # Parse the search list and use it to fill up the search hash
         if list.is_a?(Hash) && list.size > 0
           # Normalize the list hash
           list = list.to_a.map { |s|
@@ -120,13 +131,15 @@ module Jekyll
 
         end
 
-        # Force default if list parsing has resulted in an empty search
+        # If list parsing has resulted in an empty search, this is equivalent to disabling pagination
+        # Pagination will not run
         if search.empty?
-          search = { DEFAULT['search'].keys[0] => [DEFAULT['search'].values[0]] }
           Jekyll.logger.warn "Pagination:", "List of types to search over was invalid. Defaulting to all pages."
+          return
         end
 
-        # Process path strings into Regexp's
+        # Process the search hash
+        # Turn path strings into Regexp's
         wildcard = '.*?'
         search = search.to_a.map { |s|
           type, paths = s
@@ -149,9 +162,8 @@ module Jekyll
           [type, paths]
         }.to_h
         
-
-        ################ 1 ####################
-        # Get pages to search over to find the pagination templates
+        # Run the search based on the search hash
+        # Fill up the all_pages variable with the actual pages to check (to see if they are Pagination Templates)
         all_pages = []
         search.each do |type, paths|
           if type == 'pages'
@@ -188,7 +200,7 @@ module Jekyll
         # Get the default title of the site (used as backup when there is no title available for pagination)
         site_title = site.config['title']
 
-        ################ 2 #################### 
+        ################ 1 ####################
         # Specify the callback function that returns the correct docs/posts based on the collection name
         # "posts" are just another collection in Jekyll but a specialized version that require timestamps
         # This collection is the default and if the user doesn't specify a collection in their front-matter then that is the one we load
@@ -214,7 +226,7 @@ module Jekyll
           return coll
         end
 
-        ################ 3 ####################
+        ################ 2 ####################
         # Create the proc that constructs the real-life site page
         # This is necessary to decouple the code from the Jekyll site object
         page_add_lambda = lambda do | newpage |
@@ -226,7 +238,7 @@ module Jekyll
           return newpage # Return the site to the calling code
         end
 
-        ################ 3.5 ####################
+        ################ 2.5 ####################
         # lambda that removes a page from the site pages list
         page_remove_lambda = lambda do | page_to_remove |
           if page_to_remove.respond_to?(:collection)
@@ -236,7 +248,7 @@ module Jekyll
           end
         end
 
-        ################ 4 ####################
+        ################ 3 ####################
         # Create a proc that will delegate logging
         # Decoupling Jekyll specific logging
         logging_lambda = lambda do | message, type="info" |
@@ -251,7 +263,7 @@ module Jekyll
           end
         end
 
-        ################ 5 ####################
+        ################ 4 ####################
         # Now create and call the model with the real-life page creation proc and site data
         model = PaginationModel.new(logging_lambda, page_add_lambda, page_remove_lambda, collection_by_name_lambda)
         if( default_config['legacy'] ) #(REMOVE AFTER 2018-01-01)

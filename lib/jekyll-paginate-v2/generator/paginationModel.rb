@@ -22,7 +22,7 @@ module Jekyll
 
 
       def run(default_config, site_pages, site_title)
-        @logging_lambda.call "Using ConvincibleMedia fork of jekyll-paginate-v2 in dev branch", "warn"
+        @logging_lambda.call "Using ConvincibleMedia fork of jekyll-paginate-v2 in dev branch (local)", "warn"
         # By default if pagination is enabled we attempt to find all index.html pages in the site
         templates = self.discover_paginate_templates(site_pages)
         if( templates.size.to_i <= 0 )
@@ -55,17 +55,8 @@ module Jekyll
               # Request all documents in all collections that the user has requested 
               all_posts = self.get_docs_in_collections(template_config['collection'])
 
-              # Create the necessary indexes for the posts
-              all_categories = PaginationIndexer.index_posts_by(all_posts, 'categories')
-              all_categories['posts'] = all_posts; # Populate a category for all posts (this is here for backward compatibility, do not use this as it will be decommissioned 2018-01-01) 
-                                                  # (this is a default and must not be used in the category system)
-              all_tags = PaginationIndexer.index_posts_by(all_posts, 'tags')
-              all_locales = PaginationIndexer.index_posts_by(all_posts, 'locale')
-
-              # TODO: NOTE!!! This whole request for posts and indexing results could be cached to improve performance, leaving like this for now during testing
-
               # Now construct the pagination data for this template page
-              self.paginate(template, template_config, site_title, all_posts, all_tags, all_categories, all_locales)
+              self.paginate(template, template_config, site_title, all_posts)
             end
           end
         end #for
@@ -137,6 +128,15 @@ module Jekyll
           keys_to_delete << "title_suffix" # Always remove the depricated key if found
         end
 
+        # Filtering is now performed within a dedicated filters key
+        ['category', 'tag', 'locale'].each do |filter|
+          if config.has_key?(filter)
+            config['filters'] ||= {}
+            config['filters'][filter] = config[filter].dup
+            keys_to_delete << filter
+          end
+        end
+
         # Delete the depricated keys
         config.delete_if{ |k,| keys_to_delete.include? k }
       end
@@ -206,22 +206,21 @@ module Jekyll
       # template - The index.html Page that requires pagination.
       # config - The configuration settings that should be used
       #
-      def paginate(template, config, site_title, all_posts, all_tags, all_categories, all_locales)
+      def paginate(template, config, site_title, all_posts)
+        #puts "STARTING PAGINATE IN PAGINATION MODEL"
         # By default paginate on all posts in the site
         using_posts = all_posts
 
         should_union = config['combine'] == 'union'
 
         # Now start filtering out any posts that the user doesn't want included in the pagination
-        before = using_posts.size.to_i
-        using_posts = PaginationIndexer.read_config_value_and_filter_posts(config, 'category', using_posts, all_categories, should_union)
-        self._debug_print_filtering_info('Category', before, using_posts.size.to_i)
-        before = using_posts.size.to_i
-        using_posts = PaginationIndexer.read_config_value_and_filter_posts(config, 'tag', using_posts, all_tags, should_union)
-        self._debug_print_filtering_info('Tag', before, using_posts.size.to_i)
-        before = using_posts.size.to_i
-        using_posts = PaginationIndexer.read_config_value_and_filter_posts(config, 'locale', using_posts, all_locales, should_union)
-        self._debug_print_filtering_info('Locale', before, using_posts.size.to_i)
+        if config['filters'] && config['filters'].is_a? Hash
+          config['filters'].each do |key, filter|
+            before = using_posts.size.to_i
+            using_posts = PaginationIndexer.filter_posts(using_posts, key, filter)
+            self._debug_print_filtering_info(key + ': ' + PaginationIndexer.filter_to_s(filter), before, using_posts.size.to_i)
+          end
+        end
         
         # Apply sorting to the posts if configured, any field for the post is available for sorting
         if config['sort_field']
@@ -273,8 +272,11 @@ module Jekyll
 
         # Consider the default index page name and extension
         indexPageName = config['indexpage'].nil? ? '' : config['indexpage'].split('.')[0]
+        # devnote: config['extension'] should be config['indexpage'] as said should be ignored
         indexPageExt =  config['extension'].nil? ? '' : Utils.ensure_leading_dot(config['extension'])
         indexPageWithExt = indexPageName + indexPageExt
+
+        #puts "Paginator has determined indexpage style as: " + indexPageWithExt.inspect
 
         # In case there are no (visible) posts, generate the index file anyway
         total_pages = 1 if total_pages.zero?
@@ -308,16 +310,36 @@ module Jekyll
               paginated_page_url = File.join(template.dir, template.basename, paginated_page_url)
             end
           end
+          #puts "Paginator determines first index at: " + first_index_page_url.inspect
+          #puts "Paginator determines general permalink style: " + paginated_page_url.inspect
+          #puts '---over to paginator'
           
           # 3. Create the pager logic for this page, pass in the prev and next page numbers, assign pager to in-memory page
           newpage.pager = Paginator.new( config['per_page'], first_index_page_url, paginated_page_url, using_posts, cur_page_nr, total_pages, indexPageName, indexPageExt)
+          puts "Creating page #{template.data['title']} / #{cur_page_nr} - pager.page_path = " + newpage.pager.page_path.inspect
+          #puts '---back in model'
+          #puts 'New page pager has been set. newpage.pager.page_path = ' + newpage.pager.page_path.inspect
 
           # Create the url for the new page, make sure we prepend any permalinks that are defined in the template page before
+          #if newpage.pager.page_path.end_with? '/'
+          #  puts 'pager.page_path ends with /'
+          #  puts 'url = ' + newpage.set_url(File.join(newpage.pager.page_path, indexPageWithExt))
+          #elsif newpage.pager.page_path.end_with? indexPageExt
+          #  puts 'pager.page_path ends with indexPageExt, which is: ' + indexPageExt.inspect
+          #  # Support for direct .html files
+          #  puts 'url = ' + newpage.set_url(newpage.pager.page_path)
+          #else
+          #  puts 'pager.page_path fallback'
+          #  # Support for extensionless permalinks
+          #  puts 'url = ' + newpage.set_url(newpage.pager.page_path+indexPageExt)
+          #end
           newpage.set_url(newpage.pager.page_path.chomp(indexPageExt))
 
           if( template.data['permalink'] )
             newpage.data['permalink'] = newpage.pager.page_path
           end
+
+          
 
           # Transfer the title across to the new page
           if( !template.data['title'] )
@@ -365,7 +387,7 @@ module Jekyll
               end              
 
               # Convert the newpages array into a two dimensional array that has [index, page_url] as items
-              #puts( "Trail created for page #{npage.pager.page} (idx_start:#{idx_start} idx_end:#{idx_end})")
+              puts( "Trail created for page #{npage.pager.page} (idx_start:#{idx_start} idx_end:#{idx_end})")
               npage.pager.page_trail = newpages[idx_start...idx_end].each_with_index.map { |ipage,idx|
                 PageTrail.new(
                   idx_start+idx+1, #num

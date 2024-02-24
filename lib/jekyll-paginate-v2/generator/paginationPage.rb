@@ -9,17 +9,28 @@ module Jekyll
     # This page exists purely in memory and is not read from disk
     #
     class PaginationPage < Page
+      #
+      # This object is created by the generator to create a new pagination page
+      #
+      # @param page_to_copy The template - a pagination page with pagination: enabled: true
+      # @param cur_page_nr The current page number of the pagination page being generated
+      # @param total_pages Total pagination pages to generate
+      # @param index_pageandext indexpage filename as specified in config, e.g. index.html
+      #
       def initialize(page_to_copy, cur_page_nr, total_pages, index_pageandext)
         @site = page_to_copy.site
         @base = ''
         @url = ''
         @name = index_pageandext.nil? ? 'index.html' : index_pageandext
+        
+        # Creates the basename and ext member values from @name
+        # e.g. @name = index.html; @basename = index, @ext = html
+        self.process(@name)
 
-        self.process(@name) # Creates the basename and ext member values
-
-        # Only need to copy the data part of the page as it already contains the layout information
+        # Copy the data from the template page into this pagination page
         self.data = Jekyll::Utils.deep_merge_hashes( page_to_copy.data, {} )
         if !page_to_copy.data['autopage']
+          # ... and copy its content in too
           self.content = page_to_copy.content
         else
           # If the page is an auto page then migrate the necessary autopage info across into the
@@ -36,8 +47,10 @@ module Jekyll
         self.ext = page_to_copy.extname
         
         # Map the first page back to the source file path, to play nice with other plugins
+        # devnote: ensure other keys are also set on othe rpages
         self.data['path'] = page_to_copy.path if cur_page_nr == 1
 
+        # If a collection page has been copied, ensure the new page knows about it
         if page_to_copy.respond_to?(:collection)
           @collection = page_to_copy.collection
           self.data['collection'] = @collection.label
@@ -47,10 +60,13 @@ module Jekyll
         validate_data! page_to_copy.path
         validate_permalink! page_to_copy.path
 
+        #puts 'Initialized pagination page for: ' + self.data['path'].inspect
+
         # Trigger a page event
         #Jekyll::Hooks.trigger :pages, :post_init, self
       end
 
+      # Allows the reported URL for this pagination page to be set and overriden
       def set_url(url_value)
         @url = url_value
       end
