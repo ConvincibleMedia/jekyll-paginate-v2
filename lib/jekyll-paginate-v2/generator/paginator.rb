@@ -1,5 +1,3 @@
-require 'awesome_print'
-
 module Jekyll
   module PaginateV2::Generator
     
@@ -53,7 +51,6 @@ module Jekyll
                                                !default_indexpage || default_indexpage.length == 0 ? 'index' : default_indexpage,
                                                !default_ext || default_ext.length == 0 ? '.html' : default_ext)
         
-        puts 'Paginator determines this_page_url = ' + this_page_url.inspect
         # To support customizable pagination pages we attempt to explicitly append the page name to 
         # the url incase the user is using extensionless permalinks. 
         if default_indexpage && default_indexpage.length > 0
@@ -81,8 +78,6 @@ module Jekyll
         @first_page_path = Utils.format_page_number(first_index_page_url, 1, @total_pages)
         @last_page = @total_pages
         @last_page_path = Utils.format_page_number(paginated_page_url, @total_pages, @total_pages)
-
-        puts '@previous_page_path is: ' + @previous_page_path.inspect
       end
 
       # Convert this Paginator's data to a Hash suitable for use by Liquid.

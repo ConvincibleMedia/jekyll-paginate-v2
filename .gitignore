@@ -1,21 +1,30 @@
-*.gem
-*.rbc
+# Essential
+.git
+.env
 .bundle
-.config
-.yardoc
-Gemfile.lock
-InstalledFiles
-_yardoc
+
+# OS
+*.lnk
+*.db
+*.ini
+.DS_Store
+
+# Temp/cache/logs
+*.log
+**/tmp
+**/cache
+**/logs
+
+# Working files/dirs
 coverage
-doc/
-lib/bundler/man
-pkg
-rdoc
+.rspec_status
 spec/reports
-spec/dest
-tmp
-_site/
-.sass-cache
-.jekyll-metadata
-.gitignore
-vendor/
+
+# Settings
+.vscode
+agents.md
+
+# Gem
+pkg
+*.gem
+Gemfile.lock

@@ -22,7 +22,6 @@ module Jekyll
 
 
       def run(default_config, site_pages, site_title)
-        @logging_lambda.call "Using ConvincibleMedia fork of jekyll-paginate-v2 in dev branch (local)", "warn"
         # By default if pagination is enabled we attempt to find all index.html pages in the site
         templates = self.discover_paginate_templates(site_pages)
         if( templates.size.to_i <= 0 )
@@ -211,10 +210,8 @@ module Jekyll
         # By default paginate on all posts in the site
         using_posts = all_posts
 
-        should_union = config['combine'] == 'union'
-
         # Now start filtering out any posts that the user doesn't want included in the pagination
-        if config['filters'] && config['filters'].is_a? Hash
+        if config['filters'] && config['filters'].is_a?(Hash)
           config['filters'].each do |key, filter|
             before = using_posts.size.to_i
             using_posts = PaginationIndexer.filter_posts(using_posts, key, filter)
@@ -249,7 +246,7 @@ module Jekyll
 
           # Remove the first x entries
           offset_post_count = [0, config['offset'].to_i].max
-          using_posts.pop(offset_post_count)
+          using_posts = using_posts.drop(offset_post_count)
 
           if config['sort_reverse']
             using_posts.reverse!
@@ -316,7 +313,9 @@ module Jekyll
           
           # 3. Create the pager logic for this page, pass in the prev and next page numbers, assign pager to in-memory page
           newpage.pager = Paginator.new( config['per_page'], first_index_page_url, paginated_page_url, using_posts, cur_page_nr, total_pages, indexPageName, indexPageExt)
-          puts "Creating page #{template.data['title']} / #{cur_page_nr} - pager.page_path = " + newpage.pager.page_path.inspect
+          if @debug
+            @logging_lambda.call "Creating page #{template.data['title']} / #{cur_page_nr} - pager.page_path = #{newpage.pager.page_path.inspect}", 'debug'
+          end
           #puts '---back in model'
           #puts 'New page pager has been set. newpage.pager.page_path = ' + newpage.pager.page_path.inspect
 
@@ -387,7 +386,9 @@ module Jekyll
               end              
 
               # Convert the newpages array into a two dimensional array that has [index, page_url] as items
-              puts( "Trail created for page #{npage.pager.page} (idx_start:#{idx_start} idx_end:#{idx_end})")
+              if @debug
+                @logging_lambda.call "Trail created for page #{npage.pager.page} (idx_start:#{idx_start} idx_end:#{idx_end})", 'debug'
+              end
               npage.pager.page_trail = newpages[idx_start...idx_end].each_with_index.map { |ipage,idx|
                 PageTrail.new(
                   idx_start+idx+1, #num
