@@ -1,3 +1,8 @@
+# Gem packaging metadata for jekyll-paginate-v3.
+#
+# This file is used by RubyGems/Bundler when the gem is built, installed, or
+# resolved in a host Jekyll site. It declares versioning, dependencies, and the
+# files that make up the published package.
 lib = File.expand_path('lib', __dir__)
 $LOAD_PATH.unshift(lib) unless $LOAD_PATH.include?(lib)
 

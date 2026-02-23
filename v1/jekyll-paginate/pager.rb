@@ -1,5 +1,9 @@
 module Jekyll
   module Paginate
+    # Legacy pager payload used by the original jekyll-paginate templates.
+    #
+    # Kept intact for compatibility and for validating v1 behaviour against v3's
+    # compatibility mode. Used by `v1/jekyll-paginate/pagination.rb`.
     class Pager
       attr_reader :page, :per_page, :posts, :total_posts, :total_pages,
         :previous_page, :previous_page_path, :next_page, :next_page_path

@@ -9,6 +9,8 @@ module Jekyll
         # Generated templates are ordinary pages/documents with
         # `pagination.enabled: true`, so the core pagination model can process
         # them exactly like hand-written index pages.
+        #
+        # Used by Pagination::Model before normal page pagination starts.
         class Builder
           SPECIAL_KEYS = %w[items index filter filters layout layouts location frontmatter permalink title].freeze
 
@@ -23,6 +25,7 @@ module Jekyll
             @compatibility_mode = site_config['compatibility']
           end
 
+          # Builds all configured generated index templates.
           def build
             generate_definitions = @site_config.dig('indexes', 'generate')
             return 0 unless generate_definitions.is_a?(Array)
@@ -50,6 +53,7 @@ module Jekyll
 
           private
 
+          # Expands one generate definition into concrete template pages/documents.
           def build_for_definition(definition, source_items)
             entries = build_index_entries(source_items, definition['index'])
             return 0 if entries.empty?
@@ -68,6 +72,7 @@ module Jekyll
             created
           end
 
+          # Builds a single template object for one index value tuple and layout.
           def build_template(definition, entry, layout_name)
             token_map = build_token_map(definition['index'], entry['values'])
             generated_permalink = Utils.replace_tokens(definition['permalink'], token_map)
@@ -111,12 +116,16 @@ module Jekyll
             nil
           end
 
+          # Recursively groups items by index keys to produce one entry per
+          # unique key/value combination.
           def build_index_entries(items, index_keys)
             entries = []
             recurse_build_entries(items, index_keys, 0, {}, {}, entries)
             entries
           end
 
+          # Depth-first grouping for multi-level indexes such as
+          # `index: category, subcategory`.
           def recurse_build_entries(items, index_keys, depth, active_filters, active_values, entries)
             if depth >= index_keys.length
               entries << {
@@ -138,6 +147,7 @@ module Jekyll
             end
           end
 
+          # Groups items by one frontmatter key (supports nested/equivalent keys).
           def group_items_by_key(items, key)
             equivalent_lookup = Utils.build_equivalent_lookup(@equivalents)
             grouped = Hash.new { |hash, value_key| hash[value_key] = [] }
@@ -150,6 +160,8 @@ module Jekyll
             grouped
           end
 
+          # Extracts unique scalar values for a key, including comma/semicolon
+          # string lists.
           def values_for_key(item, key, equivalent_lookup)
             data = item.respond_to?(:data) && item.data.is_a?(Hash) ? item.data.dup : {}
             collection_label = Utils.item_collection_label(item)
@@ -167,6 +179,8 @@ module Jekyll
             values.map { |value| value.to_s.strip }.reject(&:empty?).uniq
           end
 
+          # Normalises one raw `indexes.generate` definition into a predictable
+          # internal shape.
           def normalise_definition(raw_definition, default_location)
             definition = Utils.safe_hash(raw_definition)
             return nil if definition.empty?
@@ -201,6 +215,8 @@ module Jekyll
             }
           end
 
+          # Splits non-special keys from a generate definition so they can be
+          # merged into the generated template's pagination config.
           def extract_pagination_overrides(definition)
             overrides = Utils.safe_hash(definition).reject { |key, _| SPECIAL_KEYS.include?(key) }
 
@@ -219,6 +235,8 @@ module Jekyll
             location
           end
 
+          # Uses `indexes.location` to infer whether generated templates should
+          # default to `pages` or a collection.
           def default_generation_location
             first_type = Query::Parser.first_type(@site_config.dig('indexes', 'location'), @site_config['keywords'])
             return 'pages' if first_type.nil?
@@ -227,6 +245,8 @@ module Jekyll
             first_type
           end
 
+          # Builds placeholder values used by generated `permalink` and `title`
+          # strings.
           def build_token_map(index_keys, values)
             token_map = {}
 

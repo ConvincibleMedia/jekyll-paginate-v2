@@ -7,10 +7,13 @@ module Jekyll
         module Pages
           # In-memory collection document generated from an index template for a
           # specific page number.
+          #
+          # Used by Pagination::Model when paginating collection documents.
           class Document < Jekyll::Document
             attr_accessor :pager
             alias_method :ext, :extname
 
+            # Clones a collection template document for one concrete page number.
             def initialize(template_document, current_page, total_pages, _index_filename)
               initialise_document(template_document.site, template_document.collection, template_document.path)
 
@@ -33,6 +36,7 @@ module Jekyll
 
             private
 
+            # Initialises minimal document internals required by Jekyll renderers.
             def initialise_document(site, collection, path)
               @site = site
               @path = path

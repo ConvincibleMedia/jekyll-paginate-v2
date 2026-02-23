@@ -7,7 +7,10 @@ module Jekyll
         module Templates
           # Generated index template page built from a layout file and generated
           # frontmatter. The pagination model later expands this template.
+          #
+          # Used by Indexes::Builder for generated page-based index templates.
           class PageTemplate < Jekyll::Page
+            # Creates an in-memory page that behaves like a hand-authored index.
             def initialize(site:, layout_name:, pagination_config:, frontmatter:, token_values:)
               @site = site
               @base = site.source
@@ -41,6 +44,8 @@ module Jekyll
 
             private
 
+            # Applies frontmatter permalink directly so the synthetic template
+            # lands at the intended route before pagination expansion.
             def apply_permalink!
               return unless data['permalink']
 

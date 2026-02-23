@@ -9,9 +9,12 @@ module Jekyll
       module Indexes
         module Templates
           # Generated index template document for collection-based index locations.
+          #
+          # Used by Indexes::Builder for generated collection-document templates.
           class DocumentTemplate < Jekyll::Document
             alias_method :ext, :extname
 
+            # Creates an in-memory collection document seeded from a layout file.
             def initialize(site:, collection:, layout_name:, pagination_config:, frontmatter:, token_values:)
               layout_path = resolve_layout_path(site, layout_name)
               parsed_layout = parse_layout(layout_path)
@@ -34,6 +37,7 @@ module Jekyll
 
             private
 
+            # Resolves layout path from theme first, then site source.
             def resolve_layout_path(site, layout_name)
               layout_dir = '_layouts'
               if site.in_theme_dir(site.source) == site.source
@@ -43,6 +47,8 @@ module Jekyll
               end
             end
 
+            # Parses layout frontmatter/body so generated documents can inherit
+            # defaults from the selected layout.
             def parse_layout(layout_path)
               unless File.exist?(layout_path)
                 raise ArgumentError, "Layout '#{layout_path}' does not exist"
@@ -64,6 +70,7 @@ module Jekyll
               }
             end
 
+            # Initialises minimal Jekyll::Document state for a synthetic doc.
             def initialise_document(site, collection, path)
               @site = site
               @path = path

@@ -1,15 +1,14 @@
 # frozen_string_literal: true
 
-# Entry point for the jekyll-paginate-v3 gem.
-#
-# The plugin runtime is namespaced under Jekyll::Plugins::PaginateV3, with
-# plugin-type modules grouped under nested modules (for example Generators).
-
 require 'jekyll'
 require 'jekyll-paginate-v3/version'
 require 'jekyll-paginate-v3/config/defaults'
 require 'jekyll-paginate-v3/config/normaliser'
-require 'jekyll-paginate-v3/utils'
+require 'jekyll-paginate-v3/utils/core'
+require 'jekyll-paginate-v3/utils/paths'
+require 'jekyll-paginate-v3/utils/formatting'
+require 'jekyll-paginate-v3/utils/nested_data'
+require 'jekyll-paginate-v3/utils/items'
 require 'jekyll-paginate-v3/query/parser'
 require 'jekyll-paginate-v3/query/filter'
 require 'jekyll-paginate-v3/query/sorter'
@@ -25,6 +24,10 @@ require 'jekyll-paginate-v3/generators/pagination_generator'
 
 module Jekyll
   module Plugins
+    # Namespace anchor for all paginate-v3 runtime components.
+    #
+    # Used by Jekyll plugin loading as the root module for config normalisation,
+    # query/filtering, generated index building, and paginated page emission.
     module PaginateV3
     end
   end

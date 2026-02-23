@@ -1,5 +1,10 @@
 module Jekyll
   module Paginate
+    # Legacy generator that powers the original jekyll-paginate flow.
+    #
+    # This implementation is shipped for backwards compatibility; v3 uses
+    # `Jekyll::Plugins::PaginateV3::Generators::PaginationGenerator`.
+    # Used by Jekyll's generator lifecycle in classic setups.
     class Pagination < Generator
       # This generator is safe from arbitrary code execution.
       safe true

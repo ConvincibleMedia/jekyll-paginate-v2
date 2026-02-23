@@ -31,8 +31,8 @@ module Jekyll
           'sort' => ['date desc'],
           'limit' => 0,
           'trail' => {
-            'before' => 0,
-            'after' => 0
+            'before' => 2,
+            'after' => 2
           },
           'indexpage' => 'index',
           'extension' => 'html',
@@ -51,7 +51,10 @@ module Jekyll
         # v1 enables strict legacy behaviour handled by Compatibility::V1::Utils.
         COMPATIBILITY_PROFILES = {
           'v2' => {
+            'enabled' => false,
+            'nested_key_separator' => ':',
             'keywords' => {
+              'all' => 'collections',
               'items' => 'posts'
             }
           },

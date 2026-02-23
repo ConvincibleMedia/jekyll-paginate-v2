@@ -6,9 +6,12 @@ module Jekyll
       module Pagination
         module Pages
           # In-memory page generated from an index template for a specific page number.
+          #
+          # Used by Pagination::Model to emit page-based pagination output.
           class Page < Jekyll::Page
             attr_accessor :pager
 
+            # Clones template content/data and annotates it with pagination metadata.
             def initialize(template_page, current_page, total_pages, index_filename)
               @site = template_page.site
               @base = ''

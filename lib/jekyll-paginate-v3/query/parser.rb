@@ -11,6 +11,9 @@ module Jekyll
         # - Hash: `{ pages: '*' }`, `{ posts: ['news/*', 'blog/*'] }`
         # - Array: combination of string/hash entries
         # - Comma-delimited String: `pages, posts`
+        #
+        # Used by Pagination::Model and Indexes::Builder to resolve configured
+        # sources into concrete site items.
         class Parser
           CANONICAL_TYPES = %w[pages all everything].freeze
 
@@ -57,6 +60,7 @@ module Jekyll
           class << self
             private
 
+            # Normalises each supported input type into parsed entry hashes.
             def parse_into(raw_search, keywords, parsed_entries)
               return if raw_search.nil?
 
@@ -80,6 +84,7 @@ module Jekyll
               parse_string_entry(raw_search, normalised_keywords, parsed_entries)
             end
 
+            # Handles scalar string entries, including comma-delimited shorthand.
             def parse_string_entry(raw_search, keywords, parsed_entries)
               value = raw_search.to_s.strip
               return if value.empty?
@@ -95,6 +100,8 @@ module Jekyll
               }
             end
 
+            # Maps configurable keyword aliases (`pages`, `all`, `everything`)
+            # to their canonical internal type.
             def canonical_type(type, keywords)
               string_type = type.to_s.strip
               return 'pages' if string_type == 'pages' || string_type == keywords['pages']
@@ -104,6 +111,7 @@ module Jekyll
               string_type
             end
 
+            # Normalises path filters and treats `*` as "no filtering".
             def normalise_paths(raw_paths)
               paths = []
 

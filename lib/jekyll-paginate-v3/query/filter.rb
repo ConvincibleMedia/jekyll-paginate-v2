@@ -15,12 +15,17 @@ module Jekyll
         # - Array of values
         # - Hash range: `{ min: ..., max: ... }`
         # - Hash list group: `{ list: [...], join: and|or }`
+        #
+        # Used by Pagination::Model and Indexes::Builder to apply frontmatter
+        # constraints to resolved item sets.
         class Filter
+          # Class helper that instantiates a configured engine per call.
           def self.filter_items(items, filters, nested_separator:, equivalents:)
             engine = new(nested_separator: nested_separator, equivalents: equivalents)
             engine.filter_items(items, filters)
           end
 
+          # Human-readable formatter used in logs/debug output.
           def self.filter_to_s(filter)
             normalised = normalise_filter(filter)
             return '[invalid filter]' if normalised == false
@@ -28,11 +33,13 @@ module Jekyll
             filter_to_s_internal(normalised)
           end
 
+          # Builds an engine configured for nested key and equivalent-key rules.
           def initialize(nested_separator:, equivalents:)
             @nested_separator = nested_separator
             @equivalent_lookup = Utils.build_equivalent_lookup(equivalents)
           end
 
+          # Applies all configured filters sequentially (logical AND across keys).
           def filter_items(items, filters)
             return items unless filters.is_a?(Hash)
 
@@ -54,6 +61,8 @@ module Jekyll
           end
 
           class << self
+            # Normalises any supported filter input into internal grouped form:
+            # `{ 'list' => [...], 'join' => 'or'|'and' }`.
             def normalise_filter(filter, wrapped = false)
               if filter.is_a?(Hash)
                 hash_filter = Utils.stringify_keys(filter)
@@ -80,6 +89,7 @@ module Jekyll
 
             private
 
+            # Accepts scalar/hash/list filter input and coerces it into an array.
             def conform_filter_to_array(filter)
               if filter.is_a?(Array)
                 filter
@@ -92,6 +102,8 @@ module Jekyll
               end
             end
 
+            # Normalises one filter entry into a comparable value or structured
+            # sub-filter hash.
             def normalise_filter_entry(entry)
               if entry.is_a?(String)
                 parse_scalar(entry.strip)
@@ -104,6 +116,8 @@ module Jekyll
               end
             end
 
+            # Normalises hash filters as either grouped list filters or numeric/
+            # date ranges.
             def normalise_filter_hash(entry)
               hash_entry = Utils.stringify_keys(entry)
 
@@ -147,6 +161,7 @@ module Jekyll
               range_hash
             end
 
+            # Parses scalar filter values, including regex literals.
             def parse_scalar(value)
               if value =~ %r{\A/(.*?)/([imx]*)\z}
                 source = Regexp.last_match(1)
@@ -161,6 +176,7 @@ module Jekyll
               interpret_numeric(value)
             end
 
+            # Parses numeric/date range endpoints and supports `today`/`now`.
             def interpret_numeric_or_date_keyword(value)
               normalised = value.to_s.strip.downcase
               return Date.today if %w[now today].include?(normalised)
@@ -168,6 +184,8 @@ module Jekyll
               interpret_numeric(value, must_cast: true)
             end
 
+            # Casts string values to Integer, Float, or Date when possible.
+            # Returns the original string unless strict casting is requested.
             def interpret_numeric(value, must_cast: false)
               return value if value.is_a?(Integer) || value.is_a?(Float) || value.is_a?(Date)
 
@@ -190,10 +208,12 @@ module Jekyll
               end
             end
 
+            # Numeric type check used by range coercion.
             def numeric?(value)
               value.is_a?(Integer) || value.is_a?(Float)
             end
 
+            # Renders a normalised filter tree to readable text for diagnostics.
             def filter_to_s_internal(filter)
               fragments = filter['list'].map do |entry|
                 if entry.is_a?(Hash)
@@ -221,6 +241,8 @@ module Jekyll
 
           private
 
+          # Extracts candidate values from item frontmatter for one filter key.
+          # Includes synthetic `collection` for parity with query/sort behaviour.
           def extract_item_values(item, key)
             data = item.respond_to?(:data) && item.data.is_a?(Hash) ? item.data : {}
             decorated_data = data.dup
@@ -233,6 +255,7 @@ module Jekyll
             values.reject { |value| value.nil? || (value.respond_to?(:empty?) && value.empty?) }
           end
 
+          # Evaluates all filter parts for one key using `and`/`or` semantics.
           def check_filter(filter, item_values)
             evaluations = filter['list'].map do |part|
               check_filter_part(part, item_values)
@@ -241,6 +264,7 @@ module Jekyll
             (filter['join'] || 'or') == 'and' ? evaluations.all? : evaluations.any?
           end
 
+          # Evaluates one filter part (nested group, range, regex, or scalar).
           def check_filter_part(part, item_values)
             if part.is_a?(Hash)
               if part.key?('list')
@@ -258,6 +282,7 @@ module Jekyll
             end
           end
 
+          # Checks one item value against an optional min/max range.
           def range_match?(value, min_value, max_value)
             comparable_value = value.is_a?(String) ? self.class.send(:interpret_numeric, value) : value
             return false if comparable_value.nil?
@@ -277,6 +302,7 @@ module Jekyll
             false
           end
 
+          # Safe comparability check for mixed scalar types.
           def values_comparable?(left, right)
             return true if left.class == right.class
             return true if (left.is_a?(Integer) || left.is_a?(Float)) && (right.is_a?(Integer) || right.is_a?(Float))

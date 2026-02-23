@@ -5,6 +5,8 @@ module Jekyll
     module PaginateV3
       module Pagination
         # Exposes pagination metadata to Liquid as `paginator`.
+        #
+        # Used by Pagination::Model for every generated page/document.
         class Paginator
           attr_reader :page, :per_page, :items, :total_items, :total_pages,
                       :previous_page, :previous_page_path, :next_page, :next_page_path,
@@ -92,6 +94,8 @@ module Jekyll
         end
 
         # Small Liquid-facing object used in pager trails.
+        #
+        # Used by Paginator page trail output.
         class PageTrail
           attr_reader :num, :path, :title
 

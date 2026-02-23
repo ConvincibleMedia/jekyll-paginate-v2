@@ -10,7 +10,11 @@ module Jekyll
         # - `sort: date desc`
         # - `sort: owner.name, date desc empty:first`
         # - `sort: ["featured desc", "date desc"]`
+        #
+        # Used by Pagination::Model to apply deterministic item ordering.
         class Sorter
+          # Applies parsed sort instructions while preserving input order as a
+          # final deterministic tiebreak.
           def self.apply(items, raw_sort, nested_separator:, equivalents:)
             instructions = parse(raw_sort)
             return items if instructions.empty?
@@ -27,6 +31,7 @@ module Jekyll
             indexed_items.map(&:first)
           end
 
+          # Parses `sort` config entries into normalised field instructions.
           def self.parse(raw_sort)
             entries = Utils.arrayify(raw_sort, split_commas: true).map { |entry| entry.to_s.strip }.reject(&:empty?)
 

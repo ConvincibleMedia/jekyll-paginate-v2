@@ -40,19 +40,25 @@ module Jekyll
           #
           # This code is deliberately isolated so it can be removed in a future
           # major release without touching the v3 pipeline.
+          # Used by Pagination::Model when `compatibility: v1` is enabled.
           class Utils
+            # Finds the best `index.html` template candidate for v1 pagination.
             def self.template_page(site_pages, source_root, paginate_path)
               site_pages.select do |page|
                 pagination_candidate?(source_root, paginate_path, page)
               end.sort_by { |page| -page.path.to_s.size }.first
             end
 
+            # Mirrors legacy candidate detection: index page within paginate path
+            # hierarchy.
             def self.pagination_candidate?(source_root, paginate_path, page)
               page_dir = File.dirname(File.expand_path(Jekyll::Plugins::PaginateV3::Utils.remove_leading_slash(page.path), source_root))
               full_paginate_path = File.expand_path(Jekyll::Plugins::PaginateV3::Utils.remove_leading_slash(paginate_path), source_root)
               page.name == 'index.html' && in_hierarchy(source_root, page_dir, File.dirname(full_paginate_path))
             end
 
+            # Recursive helper used by pagination_candidate? to match parent
+            # directory chains.
             def self.in_hierarchy(source_root, page_dir, paginate_path)
               return false if paginate_path == File.dirname(paginate_path)
               return false if paginate_path == Pathname.new(source_root).parent
@@ -60,6 +66,7 @@ module Jekyll
               page_dir == paginate_path || in_hierarchy(source_root, page_dir, File.dirname(paginate_path))
             end
 
+            # Generates v1-compatible pagers and synthetic pages.
             def self.paginate(config:, all_posts:, template_page:, page_add_lambda:, item_keyword:)
               pages = Jekyll::Plugins::PaginateV3::Utils.calculate_number_of_pages(all_posts, config['per_page'].to_i)
               pages = 1 if pages.zero?
@@ -97,6 +104,7 @@ module Jekyll
               end
             end
 
+            # Applies the classic v1 `paginate_path` format replacement.
             def self.paginate_path(template_url, page_number, permalink_format)
               return nil if page_number.nil?
               return template_url if page_number <= 1

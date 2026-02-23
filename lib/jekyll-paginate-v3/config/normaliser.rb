@@ -6,9 +6,33 @@ module Jekyll
       module Config
         # Normalises site and page-level pagination configuration into one
         # predictable v3 shape.
+        #
+        # Used by the generator and pagination model so downstream logic can
+        # assume one consistent config contract.
         class Normaliser
           LEGACY_FILTER_KEYS = %w[category tag locale].freeze
+          V2_AUTOPAGE_DEFAULTS = {
+            'tags' => {
+              'layout' => 'autopage_tags.html',
+              'title' => 'Posts tagged with :tag',
+              'permalink' => '/tag/:tag'
+            },
+            'categories' => {
+              'layout' => 'autopage_category.html',
+              'title' => 'Posts in category :cat',
+              'permalink' => '/category/:cat'
+            },
+            'collections' => {
+              'layout' => 'autopage_collection.html',
+              'title' => 'Posts in collection :coll',
+              'permalink' => '/collection/:coll'
+            }
+          }.freeze
 
+          # Produces the canonical site-level pagination config.
+          #
+          # Order matters: defaults -> compatibility profile -> raw config ->
+          # migrations/coercions.
           def self.normalise_site_config(site_config)
             site_hash = Utils.safe_hash(site_config)
             raw_pagination = Utils.safe_hash(site_hash['pagination'])
@@ -28,12 +52,14 @@ module Jekyll
             config['compatibility'] = compatibility_mode unless compatibility_mode.nil?
 
             normalise_common!(config, compatibility_mode)
-            migrate_legacy_shortcuts!(config, compatibility_mode)
+            migrate_legacy_shortcuts!(config, compatibility_mode, raw_pagination)
             migrate_v2_autopages!(config, site_hash['autopages'], compatibility_mode)
 
             config
           end
 
+          # Produces template-level config by merging page overrides on top of
+          # already-normalised site config.
           def self.normalise_template_config(site_config, template_pagination_config)
             page_config = Jekyll::Utils.deep_merge_hashes(
               Utils.deep_copy(site_config),
@@ -44,7 +70,7 @@ module Jekyll
             page_config['compatibility'] = compatibility_mode unless compatibility_mode.nil?
 
             normalise_common!(page_config, compatibility_mode)
-            migrate_legacy_shortcuts!(page_config, compatibility_mode)
+            migrate_legacy_shortcuts!(page_config, compatibility_mode, template_pagination_config)
 
             page_config
           end
@@ -158,24 +184,35 @@ module Jekyll
               source
             end
 
-            def migrate_legacy_shortcuts!(config, compatibility_mode)
+            # Migrates old v2 shorthand config into canonical v3 fields.
+            # Modern keys retain precedence when both forms are supplied.
+            def migrate_legacy_shortcuts!(config, compatibility_mode, raw_overrides = nil)
               return unless compatibility_mode == 'v2'
 
-              if config.key?('collection') && !config['collection'].nil? && !config['collection'].to_s.strip.empty?
-                config['items'] = config['collection']
+              override_hash = Utils.safe_hash(raw_overrides)
+              explicit_indexes = Utils.safe_hash(override_hash['indexes'])
+              explicit_filters = Utils.safe_hash(override_hash['filters'])
+
+              if override_hash.key?('collection') && present_config_value?(override_hash['collection']) && !override_hash.key?('items')
+                config['items'] = override_hash['collection']
               end
 
               LEGACY_FILTER_KEYS.each do |legacy_key|
-                next unless config.key?(legacy_key)
-                next if config[legacy_key].nil? || config[legacy_key].to_s.strip.empty?
+                next unless override_hash.key?(legacy_key)
+                next unless present_config_value?(override_hash[legacy_key])
+                next if explicit_filters.key?(legacy_key)
+                next if legacy_key == 'category' && override_hash[legacy_key].to_s.strip == 'posts'
 
-                config['filters'][legacy_key] = config[legacy_key]
+                config['filters'][legacy_key] = override_hash[legacy_key]
               end
 
+              config.delete('search')
               config.delete('collection')
               LEGACY_FILTER_KEYS.each { |legacy_key| config.delete(legacy_key) }
             end
 
+            # Imports legacy top-level `paginate` settings used by
+            # jekyll-paginate v1.
             def legacy_v1_overlay(site_hash)
               overlay = {}
 
@@ -199,31 +236,64 @@ module Jekyll
 
               migrated = []
 
-              migrated.concat(migrate_v2_autopage_group(autopages['tags'], 'tag', 'all'))
-              migrated.concat(migrate_v2_autopage_group(autopages['categories'], 'category', 'all'))
-              migrated.concat(migrate_v2_autopage_group(autopages['collections'], 'collection', 'all'))
+              migrated.concat(migrate_v2_autopage_group(
+                                raw_group: autopages['tags'],
+                                index_key: 'tag',
+                                items: 'all',
+                                defaults: V2_AUTOPAGE_DEFAULTS['tags']
+                              ))
+              migrated.concat(migrate_v2_autopage_group(
+                                raw_group: autopages['categories'],
+                                index_key: 'category',
+                                items: 'all',
+                                defaults: V2_AUTOPAGE_DEFAULTS['categories']
+                              ))
+              migrated.concat(migrate_v2_autopage_group(
+                                raw_group: autopages['collections'],
+                                index_key: 'collection',
+                                items: 'all',
+                                defaults: V2_AUTOPAGE_DEFAULTS['collections']
+                              ))
 
               return if migrated.empty?
 
               config['indexes']['generate'].concat(migrated)
             end
 
-            def migrate_v2_autopage_group(raw_group, index_key, items)
+            # Maps one v2 autopages group (tags/categories/collections) to one
+            # v3 generate definition.
+            def migrate_v2_autopage_group(raw_group:, index_key:, items:, defaults:)
               group = Utils.safe_hash(raw_group)
               return [] if group.empty? || group['enabled'] == false
 
               layouts = Utils.normalise_layouts(group)
-              return [] if layouts.empty?
+              layouts = [defaults['layout']] if layouts.empty?
+
+              title = group['title']
+              title = defaults['title'] unless present_config_value?(title)
+
+              permalink = group['permalink']
+              permalink = defaults['permalink'] unless present_config_value?(permalink)
 
               [
                 {
                   'items' => items,
                   'index' => index_key,
                   'layouts' => layouts,
-                  'title' => group['title'],
-                  'permalink' => group['permalink']
+                  'title' => title,
+                  'permalink' => permalink
                 }
               ]
+            end
+
+            # Indicates whether a config value should be treated as explicitly set.
+            def present_config_value?(value)
+              return false if value.nil?
+              return false if value.is_a?(String) && value.strip.empty?
+              return false if value.is_a?(Array) && value.empty?
+              return false if value.is_a?(Hash) && value.empty?
+
+              true
             end
           end
         end
