@@ -1,6 +1,6 @@
 source 'https://rubygems.org'
 
-# Specify your gem's dependencies in jekyll-paginate-v2.gemspec
+# Specify your gem's dependencies in jekyll-paginate-v3.gemspec
 gemspec
 
 if ENV["JEKYLL_VERSION"]
