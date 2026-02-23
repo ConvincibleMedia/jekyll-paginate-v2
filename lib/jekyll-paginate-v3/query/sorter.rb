@@ -8,15 +8,15 @@ module Jekyll
         #
         # Example definitions:
         # - `sort: date desc`
-        # - `sort: owner.name, date desc empty:first`
+        # - `sort: owner.name, date desc empty:first` (delimiter is configurable)
         # - `sort: ["featured desc", "date desc"]`
         #
         # Used by Pagination::Model to apply deterministic item ordering.
         class Sorter
           # Applies parsed sort instructions while preserving input order as a
           # final deterministic tiebreak.
-          def self.apply(items, raw_sort, nested_separator:, equivalents:)
-            instructions = parse(raw_sort)
+          def self.apply(items, raw_sort, nested_separator:, equivalents:, split_delimiter: ',')
+            instructions = parse(raw_sort, split_delimiter: split_delimiter)
             return items if instructions.empty?
 
             equivalent_lookup = Utils.build_equivalent_lookup(equivalents)
@@ -32,8 +32,8 @@ module Jekyll
           end
 
           # Parses `sort` config entries into normalised field instructions.
-          def self.parse(raw_sort)
-            entries = Utils.arrayify(raw_sort, split_commas: true).map { |entry| entry.to_s.strip }.reject(&:empty?)
+          def self.parse(raw_sort, split_delimiter: ',')
+            entries = Utils.arrayify(raw_sort, split_delimiter: split_delimiter).map { |entry| entry.to_s.strip }.reject(&:empty?)
 
             entries.map do |entry|
               fragments = entry.split(/\s+/)

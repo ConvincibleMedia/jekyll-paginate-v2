@@ -5,7 +5,7 @@ module Jekyll
     module PaginateV3
       module Pagination
         module Pages
-          # In-memory collection document generated from an index template for a
+          # In-memory index document generated from a pagination template for a
           # specific page number.
           #
           # Used by Pagination::Model when paginating collection documents.

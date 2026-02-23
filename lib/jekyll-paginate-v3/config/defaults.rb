@@ -11,11 +11,13 @@ module Jekyll
         DEFAULTS = {
           'enabled' => false,
           'compatibility' => nil,
+          'split' => ',',
           'nested_key_separator' => '.',
           'keywords' => {
             'pages' => 'pages',
             'all' => 'all',
             'everything' => 'everything',
+            'now' => 'now',
             'items' => 'items'
           },
           'equivalents' => [
@@ -37,7 +39,7 @@ module Jekyll
           'indexpage' => 'index',
           'extension' => 'html',
           'debug' => false,
-          'indexes' => {
+          'templates' => {
             'location' => 'pages',
             'generate' => []
           }
@@ -48,7 +50,8 @@ module Jekyll
         # v2 keeps historical public contract where the paginator payload key is
         # `posts` and where legacy shorthand keys are accepted and up-migrated.
         #
-        # v1 enables strict legacy behaviour handled by Compatibility::V1::Utils.
+        # v1 keeps legacy config keys working while staying on the shared v3
+        # pagination pipeline.
         COMPATIBILITY_PROFILES = {
           'v2' => {
             'enabled' => true,
@@ -68,7 +71,8 @@ module Jekyll
               'items' => 'posts'
             },
             'items' => 'posts',
-            'indexes' => {
+            'templates' => {
+              'location' => 'pages',
               'generate' => []
             }
           }

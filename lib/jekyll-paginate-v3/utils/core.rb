@@ -19,14 +19,50 @@ module Jekyll
           end
         end
 
-        # Converts a value into an array. Strings can be treated as comma-delimited lists.
-        def self.arrayify(value, split_commas: false)
+        # Normalises a configurable delimiter.
+        # Returns `default_delimiter` when the input is blank or not a string.
+        def self.normalise_split_delimiter(raw_delimiter, default_delimiter = ',')
+          return default_delimiter unless raw_delimiter.is_a?(String)
+
+          delimiter = raw_delimiter
+          delimiter.empty? ? default_delimiter : delimiter
+        end
+
+        # Splits one string using the configured delimiter, trims entries, and
+        # rejects blank strings.
+        def self.split_delimited_string(value, delimiter)
+          split_pattern = Regexp.new(Regexp.escape(delimiter.to_s))
+          value.to_s.split(split_pattern, -1).map(&:strip).reject(&:empty?)
+        end
+
+        # Converts scalars/arrays into a flat array and applies delimited-string
+        # expansion for all string entries.
+        def self.delimited_array(value, delimiter: ',')
+          if value.is_a?(Array)
+            value.flatten.compact.flat_map do |entry|
+              entry.is_a?(String) ? split_delimited_string(entry, delimiter) : entry
+            end
+          elsif value.is_a?(String)
+            split_delimited_string(value, delimiter)
+          elsif value.nil?
+            []
+          else
+            [value]
+          end
+        end
+
+        # Converts a value into an array. Strings can be treated as
+        # delimiter-defined lists.
+        def self.arrayify(value, split_commas: false, split_delimiter: nil)
+          delimiter = split_delimiter
+          delimiter = ',' if delimiter.nil? && split_commas
+
           if value.nil?
             []
           elsif value.is_a?(Array)
             value.flatten.compact
-          elsif split_commas && value.is_a?(String)
-            value.split(',').map(&:strip).reject(&:empty?)
+          elsif !delimiter.nil? && value.is_a?(String)
+            split_delimited_string(value, delimiter)
           else
             [value]
           end
@@ -46,21 +82,17 @@ module Jekyll
           value.is_a?(Hash) ? stringify_keys(value) : {}
         end
 
-        # Parses any config field that allows comma-delimited arrays.
+        # Backwards-compatible alias for comma-delimited list parsing.
         def self.comma_delimited_array(value)
-          if value.is_a?(Array)
-            value.flatten.map { |entry| entry.to_s.strip }.reject(&:empty?)
-          else
-            value.to_s.split(',').map(&:strip).reject(&:empty?)
-          end
+          delimited_array(value, delimiter: ',').map { |entry| entry.to_s.strip }.reject(&:empty?)
         end
 
         # Expands `layout` + `layouts` config into a unique array of layout names.
-        def self.normalise_layouts(config)
+        def self.normalise_layouts(config, split_delimiter: ',')
           source = safe_hash(config)
           layouts = []
-          layouts.concat(arrayify(source['layouts'], split_commas: true)) if source.key?('layouts')
-          layouts.concat(arrayify(source['layout'], split_commas: true)) if source.key?('layout')
+          layouts.concat(arrayify(source['layouts'], split_delimiter: split_delimiter)) if source.key?('layouts')
+          layouts.concat(arrayify(source['layout'], split_delimiter: split_delimiter)) if source.key?('layout')
           layouts.map { |entry| entry.to_s.strip }.reject(&:empty?).uniq
         end
       end

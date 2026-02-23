@@ -10,9 +10,9 @@ module Jekyll
         # - String: `pages`, `posts`, `all`, `everything`
         # - Hash: `{ pages: '*' }`, `{ posts: ['news/*', 'blog/*'] }`
         # - Array: combination of string/hash entries
-        # - Comma-delimited String: `pages, posts`
+        # - Delimited String: `pages, posts` (delimiter is configurable)
         #
-        # Used by Pagination::Model and Indexes::Builder to resolve configured
+        # Used by Pagination::Model and Templates::Builder to resolve configured
         # sources into concrete site items.
         class Parser
           CANONICAL_TYPES = %w[pages all everything].freeze
@@ -21,15 +21,15 @@ module Jekyll
           #
           # Each entry has shape: `{ 'type' => <String>, 'paths' => <Array|nil> }`
           # where `paths == nil` means no path filtering.
-          def self.parse(raw_search, keywords)
+          def self.parse(raw_search, keywords, split_delimiter: ',')
             parsed_entries = []
-            parse_into(raw_search, keywords, parsed_entries)
+            parse_into(raw_search, keywords, parsed_entries, split_delimiter)
             parsed_entries
           end
 
           # Returns the first parsed search type if present.
-          def self.first_type(raw_search, keywords)
-            parse(raw_search, keywords).first&.fetch('type', nil)
+          def self.first_type(raw_search, keywords, split_delimiter: ',')
+            parse(raw_search, keywords, split_delimiter: split_delimiter).first&.fetch('type', nil)
           end
 
           # Matches a site-relative path against optional search path filters.
@@ -61,13 +61,13 @@ module Jekyll
             private
 
             # Normalises each supported input type into parsed entry hashes.
-            def parse_into(raw_search, keywords, parsed_entries)
+            def parse_into(raw_search, keywords, parsed_entries, split_delimiter)
               return if raw_search.nil?
 
               normalised_keywords = normalise_keywords(keywords)
 
               if raw_search.is_a?(Array)
-                raw_search.each { |entry| parse_into(entry, normalised_keywords, parsed_entries) }
+                raw_search.each { |entry| parse_into(entry, normalised_keywords, parsed_entries, split_delimiter) }
                 return
               end
 
@@ -75,29 +75,29 @@ module Jekyll
                 Utils.safe_hash(raw_search).each do |type, raw_paths|
                   parsed_entries << {
                     'type' => canonical_type(type, normalised_keywords),
-                    'paths' => normalise_paths(raw_paths)
+                    'paths' => normalise_paths(raw_paths, split_delimiter)
                   }
                 end
                 return
               end
 
-              parse_string_entry(raw_search, normalised_keywords, parsed_entries)
+              parse_string_entry(raw_search, normalised_keywords, parsed_entries, split_delimiter)
             end
 
-            # Handles scalar string entries, including comma-delimited shorthand.
-            def parse_string_entry(raw_search, keywords, parsed_entries)
+            # Handles scalar string entries, including delimiter-defined shorthand.
+            def parse_string_entry(raw_search, keywords, parsed_entries, split_delimiter)
               value = raw_search.to_s.strip
               return if value.empty?
 
-              if value.include?(',')
-                value.split(',').each { |entry| parse_string_entry(entry, keywords, parsed_entries) }
-                return
-              end
+              Utils.delimited_array(value, delimiter: split_delimiter).each do |entry|
+                entry_value = entry.to_s.strip
+                next if entry_value.empty?
 
-              parsed_entries << {
-                'type' => canonical_type(value, keywords),
-                'paths' => nil
-              }
+                parsed_entries << {
+                  'type' => canonical_type(entry_value, keywords),
+                  'paths' => nil
+                }
+              end
             end
 
             # Maps configurable keyword aliases (`pages`, `all`, `everything`)
@@ -112,15 +112,15 @@ module Jekyll
             end
 
             # Normalises path filters and treats `*` as "no filtering".
-            def normalise_paths(raw_paths)
+            def normalise_paths(raw_paths, split_delimiter)
               paths = []
 
               if raw_paths.is_a?(Array)
                 raw_paths.each do |entry|
-                  paths.concat(Utils.comma_delimited_array(entry))
+                  paths.concat(Utils.delimited_array(entry, delimiter: split_delimiter))
                 end
               else
-                paths = Utils.comma_delimited_array(raw_paths)
+                paths = Utils.delimited_array(raw_paths, delimiter: split_delimiter)
               end
 
               paths = paths.map { |path| Utils.remove_leading_slash(path.to_s.strip) }.reject(&:empty?).uniq

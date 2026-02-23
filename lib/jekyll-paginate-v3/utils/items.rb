@@ -17,12 +17,15 @@ module Jekyll
         # Returns true when the object appears to be a generated index page.
         def self.generated_index?(item)
           return false unless item.respond_to?(:data)
+          return false unless item.data.is_a?(Hash)
 
-          item.data.is_a?(Hash) && item.data['autogen'] == 'jekyll-paginate-v3'
+          return true if item.data.dig('pagination', 'generated') && item.data.dig('pagination', 'index')
+
+          %w[jekyll-paginate-v2 jekyll-paginate-v3].include?(item.data['autogen'])
         end
 
-        # Returns true when the object looks like an index template.
-        def self.index_template?(item)
+        # Returns true when the object looks like a pagination template.
+        def self.pagination_template?(item)
           return false unless item.respond_to?(:data)
           return false unless item.data.is_a?(Hash)
 

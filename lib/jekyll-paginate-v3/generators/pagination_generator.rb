@@ -20,25 +20,17 @@ module Jekyll
             config = Config::Normaliser.normalise_site_config(site.config)
             config = enable_implicit_v1_compatibility(config, site)
 
+            logger = Utils::Logger.new(debug_enabled: config['debug'])
+            logger.debug("Normalised config summary: enabled=#{config['enabled']} compatibility=#{config['compatibility'] || 'none'} items=#{config['items']} templates.location=#{config.dig('templates', 'location')} generate.count=#{config.dig('templates', 'generate')&.length || 0}.")
+
             unless config['enabled']
-              Jekyll.logger.info('Pagination:', 'Disabled in site config.')
+              logger.info('Disabled in site config.')
               return
             end
 
             # Shared logger callback so deeper layers do not depend directly on
             # Jekyll logger globals.
-            log_lambda = lambda do |message, type = 'info'|
-              case type
-              when 'debug'
-                Jekyll.logger.debug('Pagination:', message.to_s)
-              when 'warn'
-                Jekyll.logger.warn('Pagination:', message.to_s)
-              when 'error'
-                Jekyll.logger.error('Pagination:', message.to_s)
-              else
-                Jekyll.logger.info('Pagination:', message.to_s)
-              end
-            end
+            log_lambda = logger.method(:call)
 
             # Abstract site mutation so the model can add pages or documents
             # without knowing where Jekyll stores each item type.
@@ -70,7 +62,7 @@ module Jekyll
             )
 
             processed_templates = model.run
-            Jekyll.logger.info('Pagination:', "Complete, processed #{processed_templates} pagination template(s)")
+            logger.info("Complete, processed #{processed_templates} pagination template(s)")
           end
 
           private
@@ -79,7 +71,7 @@ module Jekyll
           # `paginate`/`paginate_path` without explicit v3 config.
           def enable_implicit_v1_compatibility(config, site)
             return config unless config['compatibility'].nil?
-            return config unless site.config.key?('paginate')
+            return config unless legacy_v1_site_config_present?(site)
 
             Jekyll.logger.warn('Pagination:', 'Detected legacy `paginate` config; enabling `compatibility: v1` automatically.')
 
@@ -90,6 +82,11 @@ module Jekyll
             })
 
             Config::Normaliser.normalise_site_config(adjusted)
+          end
+
+          # Detects whether the site includes the legacy v1 top-level config key.
+          def legacy_v1_site_config_present?(site)
+            !site.config['paginate'].nil?
           end
         end
       end

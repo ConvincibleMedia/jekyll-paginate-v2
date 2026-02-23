@@ -7,10 +7,10 @@ module Jekyll
         # Core pagination orchestration model.
         #
         # Responsibilities:
-        # - discover index templates
-        # - generate configured indexes (`pagination.indexes.generate`)
+        # - discover pagination templates
+        # - generate configured templates (`pagination.templates.generate`)
         # - resolve and filter/sort items per template
-        # - emit paginated synthetic pages/documents
+        # - emit paginated index pages/documents
         #
         # Used by Generators::PaginationGenerator as the main runtime
         # coordinator for the pagination pipeline.
@@ -28,19 +28,18 @@ module Jekyll
 
           # Runs the full pagination pipeline for the current site build.
           def run
-            if @site_config['compatibility'] == 'v1'
-              return run_v1_compatibility
-            end
+            @log_lambda.call("Pagination pipeline start: compatibility=#{@site_config['compatibility'] || 'none'} templates.location=#{@site_config.dig('templates', 'location')} generate.count=#{@site_config.dig('templates', 'generate')&.length || 0}", 'debug')
 
-            generated_index_count = build_generated_indexes
-            @log_lambda.call("Generated #{generated_index_count} index template(s).", 'debug') if @site_config['debug']
+            generated_template_count = build_generated_templates
+            @log_lambda.call("Generated #{generated_template_count} template(s).", 'debug')
 
-            templates = discover_index_templates
+            templates = discover_templates
             if templates.empty?
-              @log_lambda.call('Enabled, but no pagination index pages were discovered.', 'warn')
+              @log_lambda.call('Enabled, but no pagination templates were discovered.', 'warn')
               return 0
             end
 
+            @log_lambda.call("Discovered #{templates.length} pagination template(s).", 'debug')
             processed = 0
             templates.each do |template|
               next unless template.data['pagination'].is_a?(Hash)
@@ -48,48 +47,20 @@ module Jekyll
               template_config = Config::Normaliser.normalise_template_config(@site_config, template.data['pagination'])
               next unless template_config['enabled']
 
+              @log_lambda.call("Paginating template '#{Utils.relative_item_path(template)}' with items=#{template_config['items']} filters=#{template_config['filters']}.", 'debug')
               paginate_template(template, template_config)
               processed += 1
             end
 
+            @log_lambda.call("Pagination pipeline complete: processed #{processed} template(s).", 'debug')
             processed
           end
 
           private
 
-          # Delegates to isolated v1 compatibility helpers when explicitly
-          # configured, preserving legacy semantics.
-          def run_v1_compatibility
-            all_posts = if @site.site_payload.dig('site', 'posts').is_a?(Array)
-                          @site.site_payload['site']['posts']
-                        elsif @site.collections['posts']
-                          @site.collections['posts'].docs
-                        else
-                          []
-                        end
-
-            all_posts = all_posts.reject { |post| post['hidden'] }
-
-            template = Compatibility::V1::Utils.template_page(@site.pages, @site.config['source'], @site_config['permalink'])
-            if template.nil?
-              @log_lambda.call('v1 compatibility is enabled, but no template index.html page was found.', 'warn')
-              return 0
-            end
-
-            Compatibility::V1::Utils.paginate(
-              config: @site_config,
-              all_posts: all_posts,
-              template_page: template,
-              page_add_lambda: @add_item_lambda,
-              item_keyword: @item_keyword
-            )
-
-            1
-          end
-
-          # Builds synthetic index templates from `indexes.generate`.
-          def build_generated_indexes
-            builder = Indexes::Builder.new(
+          # Builds synthetic pagination templates from `templates.generate`.
+          def build_generated_templates
+            builder = Templates::Builder.new(
               site: @site,
               site_config: @site_config,
               add_item_lambda: @add_item_lambda,
@@ -99,31 +70,103 @@ module Jekyll
             builder.build
           end
 
-          # Discovers all templates that request pagination, including generated
-          # templates when configured.
-          def discover_index_templates
-            templates = resolve_items(
-              @site_config.dig('indexes', 'location'),
-              include_index_templates: true,
-              include_generated_pages: true,
+          # Discovers all pages/documents configured as pagination templates.
+          def discover_templates
+            candidates = resolve_items(
+              @site_config.dig('templates', 'location'),
+              include_templates: true,
+              include_generated_indexes: true,
               include_hidden: true
             )
 
-            templates.select do |item|
-              next false unless item.respond_to?(:data)
-              next false unless item.data.is_a?(Hash)
+            templates = candidates.select { |item| explicit_template?(item) }
+            apply_implicit_v1_template_fallback(candidates, templates)
+          end
 
-              pagination = item.data['pagination']
-              pagination.is_a?(Hash) && pagination['enabled']
+          # Identifies a hand-authored pagination template from frontmatter.
+          def explicit_template?(item)
+            return false unless item.respond_to?(:data)
+            return false unless item.data.is_a?(Hash)
+
+            pagination = Utils.safe_hash(item.data['pagination'])
+            return false unless pagination['enabled']
+
+            item.data['pagination'] = pagination
+            item.data['pagination']['template'] = true
+            true
+          end
+
+          # Provides an implicit v1 migration path when old `paginate` config
+          # is present but no page has `pagination.enabled: true`.
+          #
+          # This keeps v1 compatibility focused on config migration while still
+          # allowing the shared v3 pipeline to process the intended template.
+          def apply_implicit_v1_template_fallback(candidates, templates)
+            return templates unless templates.empty?
+            return templates unless @site_config['compatibility'] == 'v1'
+            return templates unless legacy_v1_site_config_present?
+
+            template = legacy_v1_template_candidate(candidates)
+            return templates if template.nil?
+
+            template.data['pagination'] = Utils.safe_hash(template.data['pagination'])
+            template.data['pagination']['enabled'] = true
+            template.data['pagination']['template'] = true
+
+            @log_lambda.call("v1 compatibility: no explicit templates found; selected implicit template '#{Utils.relative_item_path(template)}'.", 'debug')
+            [template]
+          end
+
+          # Detects whether the site includes the legacy v1 top-level config key.
+          def legacy_v1_site_config_present?
+            !@site.config['paginate'].nil?
+          end
+
+          # Selects the legacy v1 index page candidate as an implicit template.
+          # The deepest matching `index.html` under the configured paginate path
+          # hierarchy is preferred.
+          def legacy_v1_template_candidate(items)
+            source_root = File.expand_path(@site.config['source'].to_s)
+            paginate_path = @site_config['permalink']
+
+            items.select { |item| legacy_v1_pagination_candidate?(source_root, paginate_path, item) }.sort_by { |item| -item.path.to_s.size }.first
+          end
+
+          # Mirrors v1 template candidate detection rules for migration fallback.
+          def legacy_v1_pagination_candidate?(source_root, paginate_path, item)
+            return false unless item.respond_to?(:name)
+            return false unless item.respond_to?(:path)
+            return false if item.respond_to?(:collection) && !item.collection.nil?
+            return false if Utils.generated_index?(item)
+            return false unless item.name.to_s == 'index.html'
+
+            page_dir = File.dirname(File.expand_path(Utils.remove_leading_slash(item.path), source_root))
+            full_paginate_path = File.expand_path(Utils.remove_leading_slash(paginate_path), source_root)
+            legacy_v1_in_hierarchy?(source_root, page_dir, File.dirname(full_paginate_path))
+          end
+
+          # Traverses parent directories to determine whether the page directory
+          # is inside the legacy paginate path hierarchy.
+          def legacy_v1_in_hierarchy?(source_root, page_dir, paginate_dir)
+            source_parent = File.dirname(File.expand_path(source_root))
+            current_dir = paginate_dir
+
+            loop do
+              return false if current_dir == File.dirname(current_dir)
+              return false if current_dir == source_parent
+              return true if page_dir == current_dir
+
+              current_dir = File.dirname(current_dir)
             end
           end
 
           # Resolves the shared search format into concrete site items and then
           # applies generic inclusion/exclusion flags.
-          def resolve_items(raw_search, include_index_templates: false, include_generated_pages: false, include_hidden: false)
-            entries = Query::Parser.parse(raw_search, @site_config['keywords'])
+          def resolve_items(raw_search, include_templates: false, include_generated_indexes: false, include_hidden: false)
+            entries = Query::Parser.parse(raw_search, @site_config['keywords'], split_delimiter: @site_config['split'])
             return [] if entries.empty?
 
+            @log_lambda.call("Resolving items from search=#{raw_search.inspect} (entries=#{entries.length}, include_templates=#{include_templates}, include_generated_indexes=#{include_generated_indexes}, include_hidden=#{include_hidden}).", 'debug')
             resolved = []
             entries.each do |entry|
               resolved.concat(resolve_entry(entry))
@@ -131,11 +174,13 @@ module Jekyll
 
             resolved.uniq!
             resolved.sort_by! { |item| Utils.relative_item_path(item) }
+            @log_lambda.call("Resolved #{resolved.length} unique item(s) before exclusion filters.", 'debug')
 
-            resolved.select! { |item| !Utils.generated_index?(item) } unless include_generated_pages
-            resolved.select! { |item| !Utils.index_template?(item) } unless include_index_templates
+            resolved.select! { |item| !Utils.generated_index?(item) } unless include_generated_indexes
+            resolved.select! { |item| !Utils.pagination_template?(item) } unless include_templates
             resolved.select! { |item| !item['hidden'] } unless include_hidden
 
+            @log_lambda.call("Resolved #{resolved.length} item(s) after exclusion filters.", 'debug')
             resolved
           end
 
@@ -155,6 +200,7 @@ module Jekyll
                              @site.collections[type]&.docs || []
                            end
 
+            @log_lambda.call("Resolving entry type='#{type}' paths=#{paths.inspect} from #{source_items.length} source item(s).", 'debug')
             source_items.select do |item|
               Query::Parser.path_allowed?(Utils.relative_item_path(item), paths)
             end
@@ -168,22 +214,30 @@ module Jekyll
           # generating concrete pages.
           def paginate_template(template, config)
             all_items = resolve_items(config['items'])
+            @log_lambda.call("Template '#{Utils.relative_item_path(template)}': resolved #{all_items.length} candidate item(s).", 'debug')
             filtered_items = Query::Filter.filter_items(
               all_items,
               config['filters'],
               nested_separator: @nested_separator,
-              equivalents: @equivalents
+              equivalents: @equivalents,
+              split_delimiter: config['split'],
+              now_keyword: config.dig('keywords', 'now'),
+              log_lambda: @log_lambda
             )
+            @log_lambda.call("Template '#{Utils.relative_item_path(template)}': #{filtered_items.length} item(s) after filters=#{config['filters']}.", 'debug')
 
             sorted_items = Query::Sorter.apply(
               filtered_items,
               config['sort'],
               nested_separator: @nested_separator,
-              equivalents: @equivalents
+              equivalents: @equivalents,
+              split_delimiter: config['split']
             )
+            @log_lambda.call("Template '#{Utils.relative_item_path(template)}': sorted #{sorted_items.length} item(s) by #{config['sort']} before offset.", 'debug')
 
             offset = [config['offset'].to_i, 0].max
             sorted_items = sorted_items.drop(offset)
+            @log_lambda.call("Template '#{Utils.relative_item_path(template)}': #{sorted_items.length} item(s) after offset=#{offset}.", 'debug')
 
             total_pages = Utils.calculate_number_of_pages(sorted_items, config['per_page'])
             total_pages = 1 if total_pages.zero?
@@ -192,6 +246,7 @@ module Jekyll
               total_pages = [total_pages, config['limit'].to_i].min
             end
 
+            @log_lambda.call("Template '#{Utils.relative_item_path(template)}': generating #{total_pages} page(s) with per_page=#{config['per_page']} limit=#{config['limit']}.", 'debug')
             emit_paginated_pages(template, config, sorted_items, total_pages)
           end
 
@@ -227,7 +282,20 @@ module Jekyll
               )
 
               generated.set_url(synthetic_page_url(generated.pager.page_path, index_name, extension))
+              generated.data['pagination'] = Utils.safe_hash(generated.data['pagination'])
+              generated.data['pagination'].delete('template')
+              generated.data['pagination']['index'] = true
+
+              # Only mark emitted indexes as generated when their source
+              # template came from the template-generation pipeline.
+              if template.data.dig('paginate_v3', 'generated_template')
+                generated.data['pagination']['generated'] = true
+              else
+                generated.data['pagination'].delete('generated')
+              end
               generated.data['paginator'] = generated.pager.to_liquid
+              generated.data.delete('paginate_v3')
+              generated.data['autogen'] = 'jekyll-paginate-v2' if config['compatibility'] == 'v2'
 
               if template.data['permalink']
                 generated.data['permalink'] = generated.pager.page_path
@@ -236,12 +304,12 @@ module Jekyll
               base_title = template.data['title'] || @site.config['title']
               if current_page > 1
                 generated.data['title'] = Utils.format_page_title(config['title'], base_title, current_page, total_pages)
-                generated.data['autogen'] = 'jekyll-paginate-v3'
               else
                 generated.data['title'] = base_title
               end
 
               @add_item_lambda.call(generated)
+              @log_lambda.call("Emitted pagination page #{current_page}/#{total_pages} at '#{generated.url}' for template '#{Utils.relative_item_path(template)}'.", 'debug')
               new_pages << generated
             end
 
@@ -259,6 +327,7 @@ module Jekyll
             return if before.zero? && after.zero?
 
             trail_size = before + after + 1
+            @log_lambda.call("Applying page trail with before=#{before} after=#{after} size=#{trail_size} across #{generated_pages.length} generated page(s).", 'debug')
 
             generated_pages.each do |page|
               range_start = [page.pager.page - before - 1, 0].max
@@ -271,6 +340,7 @@ module Jekyll
               page.pager.page_trail = generated_pages[range_start...range_end].each_with_index.map do |trail_page, index|
                 PageTrail.new(range_start + index + 1, trail_page.url, trail_page.data['title'])
               end
+              @log_lambda.call("Assigned trail to page #{page.pager.page}: range_start=#{range_start + 1} range_end=#{range_end}.", 'debug')
             end
           end
 

@@ -41,7 +41,7 @@ Several config keys in different places in v3 will use the same format, that of 
 * hash: each key/val is type/path-filter(s), where "type" is one of the strings above, and path-filter(s) is a string or array of strings representing allowed filepaths. e.g. {posts: "*"}
 * array: each element is either of the above. Array can be specified by a comma-delimited string.
 
-This format is accepted as the value of `site.pagination.indexes.location`, or in individual pagination pages at `page.pagination.items` or in `site.pagination.autoindex.generate[].items` (see below).
+This format is accepted as the value of `site.pagination.templates.location`, or in individual pagination templates at `page.pagination.items` or in `site.pagination.templates.generate[].items` (see below).
 
 The strings `pages`, `all` and `everything` which are used to have special meaning can be changed with the config key `site.pagination.keywords` which can have a key for each such keyword to change, the value of which is the new keyword, e.g. `site.pagination.keywords.all: 'all-collections'`.
 
@@ -57,9 +57,9 @@ Further complete/enhance the filtering functionality so that nested keys can be 
 
 Top level config can now also have `items` and `filters` to specify defaults (and can accept `collection`, `category`, `tag` and `locale` to set defaults in v2 mode).
 
-### Indexes
+### Templates and Indexes
 
-In v3 we will use the term "index" to refer to what in v2 is sometimes called a "pagination page". That is, any page where the paginator is active, i.e. where we will list some set of items potentially over multiple pages, is an "index" or "index page".
+In v3, a page/document with `pagination.enabled: true` is a pagination template. The paginator discovers templates and expands each one into index pages `1..n`.
 
 ## AutoPages
 
@@ -74,9 +74,9 @@ These issues may be resolved during the course of upgrading to include the follo
 
 ### New features
 
-The AutoPage feature will be fully merged into the core functionality and not given a separate name. It is simply a way of creating indexes with particular `items` and `filters` from config, by reading site files.
+The AutoPage feature will be fully merged into the core functionality and not given a separate name. It is simply a way of creating templates with particular `items` and `filters` from config, by reading site files.
 
-The `indexes` config key is now nested under the `pagination` key rather than as a top-level key at `site.indexes`. This key is also used for other settings that apply to all indexes. The part that corresponds to automatically generating indexes will live under `pagination.indexes.generate`. In v2 mode, we additionally read `site.autopages` and try to up-migrate it to v3, adding this on to `pagination.indexes.generate`.
+The `templates` config key is nested under `pagination`. This key is used for settings that apply to template discovery and generation. Automatically generating templates lives under `pagination.templates.generate`. In v2 mode, we additionally read `site.autopages` and up-migrate it to v3 by appending generated template definitions into `pagination.templates.generate`.
 
 Again, categories, tags and collections will cease to have special treatment and become specific cases of a more general feature. We will now be able to **generate pagination pages based on any frontmatter key in any type of document/page**.
 
@@ -105,7 +105,7 @@ generate: # array of types of index to generate
     subcategory: /^s/
 ```
 
-i.e. `generate` is an array of definitions of how to generate index pages. The old `categories`, `tags` and `collections` config keys will still be allowed and up-migrated in v2 mode, essentially making them alternatives/shortcuts into config like the above.
+i.e. `generate` is an array of definitions of how to generate pagination templates. The old `categories`, `tags` and `collections` config keys will still be allowed and up-migrated in v2 mode, essentially making them alternatives/shortcuts into config like the above.
 
 The `permalink` config key currently allows placeholders for `:coll`, `:cat` and `:tag`. In v3 the placeholder is automatically whatever frontmatter key you are indexing on, e.g. if you're indexing on `weight` then a `:weight` placeholder is available. Note that nested keys are possible like `owner.name` resulting in `:owner.name`. Watch out for possible clashes if `nested_key_separator` is changed to `:`; longest match wins. The `:coll`, `:cat` and `:tag` placeholders are available additionally as a special case (legacy support) if you indexed on `collection`, `category/ies` or `tag/s` and v2 mode is on.
 
@@ -116,12 +116,12 @@ The `layouts` config key for each generated index is now accepted as a string di
 Further new config:
 
 ```yaml
-location: pages # where index pages are located; see above
+location: pages # where pagination templates are located; see above
 generate:
 - items: animals
   index: weight
   layout: html/index.html
-  location: collection_name # override where these indexes will be created (See below) 
+  location: collection_name # override where these templates will be created (See below) 
   trail: 9 # etc. Can include any other config keys from pagination that should be overriden for this pagination page, e.g. trail, sort
   frontmatter:
     arbitrary: additional frontmatter
@@ -129,9 +129,9 @@ generate:
     note: clashes are overwritten by other frontmatter the generator writes
 ```
 
-By default, generated index pages are created in the same location where index pages are expected to be found, as per the `site.pagination.indexes.location` config (`pages` by default). If this config has multiple entries, the first is considered. If it's `pages` or `all`, indexes are generated as pages; if it's a collection name indexes are generated as docs in that collection. This can be overridden with the `location` key in an element of the `generate` array, for which the valid values are `pages` or {collection_name}.
+By default, generated templates are created in the same location where templates are expected to be found, as per `site.pagination.templates.location` (`pages` by default). If this config has multiple entries, the first is considered. If it is `pages` or `all`, templates are generated as pages; if it is a collection name, templates are generated as docs in that collection. This can be overridden with `location` in each `generate` entry, where valid values are `pages` or `{collection_name}`.
 
-Note that it is possible the index page is generated into the collection/set of items that it paginates - we always protect against including an index page in pagination items.
+Note that a template can be generated into the same collection/set of items that it paginates. We always protect against including templates in pagination items.
 
 ## Equivalents
 

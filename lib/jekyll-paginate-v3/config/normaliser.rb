@@ -18,7 +18,7 @@ module Jekyll
               'permalink' => '/tag/:tag',
               'slugify' => {
                 'mode' => 'default',
-                'cased' => false
+                'case' => false
               }
             },
             'categories' => {
@@ -27,7 +27,7 @@ module Jekyll
               'permalink' => '/category/:cat',
               'slugify' => {
                 'mode' => 'default',
-                'cased' => false
+                'case' => false
               }
             },
             'collections' => {
@@ -36,7 +36,7 @@ module Jekyll
               'permalink' => '/collection/:coll',
               'slugify' => {
                 'mode' => 'default',
-                'cased' => false
+                'case' => false
               }
             }
           }.freeze
@@ -73,16 +73,17 @@ module Jekyll
           # Produces template-level config by merging page overrides on top of
           # already-normalised site config.
           def self.normalise_template_config(site_config, template_pagination_config)
+            raw_template_pagination = Utils.safe_hash(template_pagination_config)
             page_config = Jekyll::Utils.deep_merge_hashes(
               Utils.deep_copy(site_config),
-              Utils.safe_hash(template_pagination_config)
+              raw_template_pagination
             )
 
             compatibility_mode = normalise_compatibility(page_config['compatibility']) || normalise_compatibility(site_config['compatibility'])
             page_config['compatibility'] = compatibility_mode unless compatibility_mode.nil?
 
             normalise_common!(page_config, compatibility_mode)
-            migrate_legacy_shortcuts!(page_config, compatibility_mode, template_pagination_config)
+            migrate_legacy_shortcuts!(page_config, compatibility_mode, raw_template_pagination)
 
             page_config
           end
@@ -93,9 +94,10 @@ module Jekyll
             def normalise_common!(config, compatibility_mode)
               config['enabled'] = !!config['enabled']
               config['compatibility'] = compatibility_mode if compatibility_mode
+              config['split'] = normalise_split(config['split'])
               config['nested_key_separator'] = normalise_nested_separator(config['nested_key_separator'])
               config['keywords'] = normalise_keywords(config['keywords'])
-              config['equivalents'] = normalise_equivalents(config['equivalents'])
+              config['equivalents'] = normalise_equivalents(config['equivalents'], config['split'])
               config['items'] = normalise_items_value(config['items'])
               config['filters'] = Utils.safe_hash(config['filters'])
               config['offset'] = [config['offset'].to_i, 0].max
@@ -107,8 +109,8 @@ module Jekyll
               config['extension'] = config['extension'].to_s
               config['debug'] = !!config['debug']
               config['trail'] = normalise_trail(config['trail'])
-              config['sort'] = normalise_sort(config['sort'], config['sort_field'], config['sort_reverse'])
-              config['indexes'] = normalise_indexes(config['indexes'])
+              config['sort'] = normalise_sort(config['sort'], config['sort_field'], config['sort_reverse'], config['split'])
+              config['templates'] = normalise_templates(config['templates'])
 
               # Keep legacy keys out of downstream logic after migration.
               config.delete('sort_field')
@@ -121,6 +123,10 @@ module Jekyll
               return value if %w[v1 v2].include?(value)
 
               nil
+            end
+
+            def normalise_split(raw_split)
+              Utils.normalise_split_delimiter(raw_split, DEFAULTS['split'])
             end
 
             def normalise_nested_separator(raw_separator)
@@ -142,14 +148,14 @@ module Jekyll
               keywords
             end
 
-            def normalise_equivalents(raw_equivalents)
+            def normalise_equivalents(raw_equivalents, split_delimiter)
               return false if raw_equivalents == false
 
               array = Utils.arrayify(raw_equivalents)
               return Utils.deep_copy(DEFAULTS['equivalents']) if array.empty?
 
               array.map do |group|
-                Utils.arrayify(group, split_commas: true).map { |entry| entry.to_s.strip }.reject(&:empty?).uniq
+                Utils.arrayify(group, split_delimiter: split_delimiter).map { |entry| entry.to_s.strip }.reject(&:empty?).uniq
               end.reject { |group| group.length < 2 }
             end
 
@@ -169,8 +175,8 @@ module Jekyll
               }
             end
 
-            def normalise_sort(raw_sort, raw_sort_field, raw_sort_reverse)
-              sort_entries = Utils.arrayify(raw_sort, split_commas: true).map(&:to_s).map(&:strip).reject(&:empty?)
+            def normalise_sort(raw_sort, raw_sort_field, raw_sort_reverse, split_delimiter)
+              sort_entries = Utils.arrayify(raw_sort, split_delimiter: split_delimiter).map(&:to_s).map(&:strip).reject(&:empty?)
               return sort_entries unless sort_entries.empty?
 
               return Utils.deep_copy(DEFAULTS['sort']) if raw_sort_field.nil? || raw_sort_field.to_s.strip.empty?
@@ -179,9 +185,9 @@ module Jekyll
               ["#{raw_sort_field} #{direction}"]
             end
 
-            def normalise_indexes(raw_indexes)
-              defaults = Utils.deep_copy(DEFAULTS['indexes'])
-              source = defaults.merge(Utils.safe_hash(raw_indexes))
+            def normalise_templates(raw_templates)
+              defaults = Utils.deep_copy(DEFAULTS['templates'])
+              source = defaults.merge(Utils.safe_hash(raw_templates))
 
               source['location'] = defaults['location'] if source['location'].nil? || source['location'].to_s.strip.empty?
 
@@ -202,7 +208,6 @@ module Jekyll
               return unless compatibility_mode == 'v2'
 
               override_hash = Utils.safe_hash(raw_overrides)
-              explicit_indexes = Utils.safe_hash(override_hash['indexes'])
               explicit_filters = Utils.safe_hash(override_hash['filters'])
 
               if override_hash.key?('collection') && present_config_value?(override_hash['collection']) && !override_hash.key?('items')
@@ -218,7 +223,6 @@ module Jekyll
                 config['filters'][legacy_key] = override_hash[legacy_key]
               end
 
-              config.delete('search')
               config.delete('collection')
               LEGACY_FILTER_KEYS.each { |legacy_key| config.delete(legacy_key) }
             end
@@ -239,7 +243,7 @@ module Jekyll
               overlay
             end
 
-            # Legacy migration path for v2 `autopages` into v3 `pagination.indexes.generate`.
+            # Legacy migration path for v2 `autopages` into v3 `pagination.templates.generate`.
             def migrate_v2_autopages!(config, raw_autopages, compatibility_mode)
               return unless compatibility_mode == 'v2'
 
@@ -252,33 +256,36 @@ module Jekyll
                                 raw_group: autopages['tags'],
                                 index_key: 'tag',
                                 items: 'all',
-                                defaults: V2_AUTOPAGE_DEFAULTS['tags']
+                                defaults: V2_AUTOPAGE_DEFAULTS['tags'],
+                                split_delimiter: config['split']
                               ))
               migrated.concat(migrate_v2_autopage_group(
                                 raw_group: autopages['categories'],
                                 index_key: 'category',
                                 items: 'all',
-                                defaults: V2_AUTOPAGE_DEFAULTS['categories']
+                                defaults: V2_AUTOPAGE_DEFAULTS['categories'],
+                                split_delimiter: config['split']
                               ))
               migrated.concat(migrate_v2_autopage_group(
                                 raw_group: autopages['collections'],
                                 index_key: 'collection',
                                 items: 'all',
-                                defaults: V2_AUTOPAGE_DEFAULTS['collections']
+                                defaults: V2_AUTOPAGE_DEFAULTS['collections'],
+                                split_delimiter: config['split']
                               ))
 
               return if migrated.empty?
 
-              config['indexes']['generate'].concat(migrated)
+              config['templates']['generate'].concat(migrated)
             end
 
             # Maps one v2 autopages group (tags/categories/collections) to one
             # v3 generate definition.
-            def migrate_v2_autopage_group(raw_group:, index_key:, items:, defaults:)
+            def migrate_v2_autopage_group(raw_group:, index_key:, items:, defaults:, split_delimiter:)
               group = Utils.safe_hash(raw_group)
               return [] if group.empty? || group['enabled'] == false
 
-              layouts = Utils.normalise_layouts(group)
+              layouts = Utils.normalise_layouts(group, split_delimiter: split_delimiter)
               layouts = [defaults['layout']] if layouts.empty?
 
               title = group['title']

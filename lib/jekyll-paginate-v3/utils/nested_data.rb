@@ -14,12 +14,12 @@ module Jekyll
         end
 
         # Builds lookup table used for equivalent key resolution.
-        def self.build_equivalent_lookup(raw_equivalents)
+        def self.build_equivalent_lookup(raw_equivalents, split_delimiter: ',')
           return {} if raw_equivalents == false || raw_equivalents.nil?
 
           lookup = {}
           arrayify(raw_equivalents).each do |group|
-            keys = arrayify(group, split_commas: true).map { |entry| entry.to_s.strip }.reject(&:empty?).uniq
+            keys = arrayify(group, split_delimiter: split_delimiter).map { |entry| entry.to_s.strip }.reject(&:empty?).uniq
             next if keys.length < 2
 
             keys.each { |key| lookup[key] = keys }
