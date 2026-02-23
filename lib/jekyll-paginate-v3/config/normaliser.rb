@@ -151,11 +151,23 @@ module Jekyll
             def normalise_equivalents(raw_equivalents, split_delimiter)
               return false if raw_equivalents == false
 
-              array = Utils.arrayify(raw_equivalents)
-              return Utils.deep_copy(DEFAULTS['equivalents']) if array.empty?
+              groups = if raw_equivalents.is_a?(Array)
+                         raw_equivalents
+                       elsif raw_equivalents.nil?
+                         []
+                       else
+                         [raw_equivalents]
+                       end
+              return Utils.deep_copy(DEFAULTS['equivalents']) if groups.empty?
 
-              array.map do |group|
-                Utils.arrayify(group, split_delimiter: split_delimiter).map { |entry| entry.to_s.strip }.reject(&:empty?).uniq
+              groups.map do |group|
+                entries = if group.is_a?(Array)
+                            group.flat_map { |entry| Utils.delimited_array(entry, delimiter: split_delimiter) }
+                          else
+                            Utils.delimited_array(group, delimiter: split_delimiter)
+                          end
+
+                entries.map { |entry| entry.to_s.strip }.reject(&:empty?).uniq
               end.reject { |group| group.length < 2 }
             end
 

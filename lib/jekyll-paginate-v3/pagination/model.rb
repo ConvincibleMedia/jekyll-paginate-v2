@@ -80,6 +80,15 @@ module Jekyll
             )
 
             templates = candidates.select { |item| explicit_template?(item) }
+            generated_templates = (@site.pages + all_collection_documents).select do |item|
+              next false unless item.respond_to?(:data)
+              next false unless item.data.is_a?(Hash)
+              next false unless item.data.dig('paginate_v3', 'generated_template')
+
+              explicit_template?(item)
+            end
+            templates.concat(generated_templates)
+            templates.uniq!
             apply_implicit_v1_template_fallback(candidates, templates)
           end
 
@@ -260,7 +269,11 @@ module Jekyll
             index_file = "#{index_name}#{extension}"
 
             first_page_url = template_first_page_url(template)
-            paginated_page_url = join_url(first_page_url, config['permalink'])
+            paginated_page_url = if config['compatibility'] == 'v1' && legacy_v1_site_config_present? && !@site.config['paginate_path'].nil?
+                                   Utils.ensure_leading_slash(config['permalink'].to_s)
+                                 else
+                                   join_url(first_page_url, config['permalink'])
+                                 end
 
             (1..total_pages).each do |current_page|
               generated = if template.respond_to?(:collection)
@@ -340,6 +353,7 @@ module Jekyll
               page.pager.page_trail = generated_pages[range_start...range_end].each_with_index.map do |trail_page, index|
                 PageTrail.new(range_start + index + 1, trail_page.url, trail_page.data['title'])
               end
+              page.data['paginator'] = page.pager.to_liquid
               @log_lambda.call("Assigned trail to page #{page.pager.page}: range_start=#{range_start + 1} range_end=#{range_end}.", 'debug')
             end
           end

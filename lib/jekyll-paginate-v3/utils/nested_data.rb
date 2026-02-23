@@ -18,8 +18,15 @@ module Jekyll
           return {} if raw_equivalents == false || raw_equivalents.nil?
 
           lookup = {}
-          arrayify(raw_equivalents).each do |group|
-            keys = arrayify(group, split_delimiter: split_delimiter).map { |entry| entry.to_s.strip }.reject(&:empty?).uniq
+          groups = raw_equivalents.is_a?(Array) ? raw_equivalents : [raw_equivalents]
+
+          groups.each do |group|
+            keys = if group.is_a?(Array)
+                     group.flat_map { |entry| delimited_array(entry, delimiter: split_delimiter) }
+                   else
+                     delimited_array(group, delimiter: split_delimiter)
+                   end
+            keys = keys.map { |entry| entry.to_s.strip }.reject(&:empty?).uniq
             next if keys.length < 2
 
             keys.each { |key| lookup[key] = keys }

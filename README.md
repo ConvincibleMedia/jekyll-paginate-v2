@@ -2,11 +2,13 @@
 
 Robust, highly configurable pagination for Jekyll.
 
-* Paginate any content source (pages, one collection, many collections, all collections, or everything).
+* Paginate any content source (pages, collections).
 * Filter on any frontmatter key (including nested keys).
 * Generate pagination templates automatically from frontmatter values.
 
-Compatibility modes for (https://github.com/jekyll/jekyll-paginate)-v1 and [jekyll-paginate-v2 ](https://github.com/sverrirs/jekyll-paginate-v2)are also included.
+A **template** is a page/document in which you have set `pagination: enabled: true`. These pages/documents will be removed, but their settings/contents are used to generate an **index** page/document for each page in the pagination (e.g. page 1, page 2, page 3). Each index gains a `paginator` variable which you can use to iterate over the **items** that have been paginated to that page (e.g. items 1–9 on page 1, 10–18 on page 2, etc.).
+
+Compatibility modes for (https://github.com/jekyll/jekyll-paginate)-v1 and [jekyll-paginate-v2 ](https://github.com/sverrirs/jekyll-paginate-v2) are also included.
 
 ## Quickstart
 
@@ -27,15 +29,15 @@ pagination:
   enabled: true
 ```
 
-Create pagination templates, specifying what they paginate:
+Create pagination templates (by default these must be pages on the site, not collection documents). Each template specifies what it paginates:
 
 ```yaml
 # post-index.md - example
 ---
-layout: post-listing
+layout: post-listing # indexes will use this layout
 pagination:
   enabled: true
-  items: posts
+  items: posts # paginate over site posts
 ---
 ```
 
@@ -55,37 +57,39 @@ Then on the layouts used by the generated indexes:
 {% endif %}
 ```
 
+
 ## Configuration
 
 ```yaml
 pagination:
   enabled: false # global disable
-  split: "," # delimiter used where array-like fields accept delimited strings
 
-  # Pagination settings - setting them here sets these as defaults for all templates
+  # Defaults that will be used for all templates
   items: posts # what to paginate
   filters: {} # filter which pages to include in pagination
 
   per_page: 10 # how many items per page
   offset: 0 # skip first x items
   limit: 0 # paginate no more than x items
-  trail:
+  trail: # number of pages in page trail around current page
     before: 0
     after: 0
 
   sort: date desc # how to sort paginated items
 
+  # Index page defaults
   permalink: /page/:num/
   title: ':title - page :num'
   indexpage: index
   extension: html
 
   templates:
-    location: pages
-    generate: []
+    location: pages # where in site to look for templates
+    generate: [] # auto-generate templates
 
   compatibility: # optional: v2 or v1
   nested_key_separator: '.' # or ':'
+  split: "," # delimiter used where array-like fields accept delimited strings
   keywords:
     pages: pages
     all: all
@@ -97,6 +101,7 @@ pagination:
     - [category, categories]
 ```
 
+
 ## Pagination Templates
 
 Any page/document becomes a template when it has:
@@ -106,190 +111,56 @@ pagination:
   enabled: true
 ```
 
-Template discovery is controlled by `pagination.templates.location`, which uses the shared search format.
+PaginateV3 looks for templates according to the configuration at `pagination.templates.location`, which uses the [Search Format](#search-format). By default this is `pages`, so pagination templates must be site pages. However, for example, you could create a special collection just for your templates, e.g. `index`, and set `pagination.templates.location: index`.
 
-## Search Format (`items`, `templates.location`, `templates.generate[].items`)
+### Items
 
-Accepted forms:
+Pagination templates must specify what items they paginate over with the `items` key. This key uses the [Search Format](#search-format) to identify where to look for items to paginate over.
 
-1. String: `pages`, `posts`, `all`, `everything`
-2. Hash: `{ posts: '*' }`, `{ pages: 'blog/*' }`
-3. Array of strings/hashes
-4. Delimited string array: `pages, posts` (delimiter comes from `pagination.split`)
+### Filters
 
-Special keywords (`pages`, `all`, `everything`) are configurable via `pagination.keywords`.
-
-## Filtering
-
-Filters use `pagination.filters`, which must be a hash:
+Filters reduce the items to paginate over according to certain criteria on their frontmatter.
 
 ```yaml
 pagination:
   filters:
-    <frontmatter key>: <filter definition>
+    <frontmatterkey>: <definition>
 ```
 
-Each filter key is applied independently, then combined with logical `AND` across keys.
-
-Example:
-
-```yaml
-pagination:
-  enabled: true
-  items: posts
-  filters:
-    category: news
-    locale: en_GB
-    author.name: /^a/i
-    rating:
-      min: 3
-      max: 5
-```
-
-### Canonical Longhand Form
-
-All filter definitions are normalised into this recursive group shape:
+The `<definition>` can be in these forms:
 
 ```yaml
 filters:
-  <key>:
-    include: <filter-definition-list>
-    exclude: <filter-definition-list>
-    join: or # or and
-```
-
-- `include` and `exclude` are both optional, but at least one must be present.
-- `join` controls how sibling entries are combined (`or` default, `and` optional).
-- `exclude` entries are negated after combination.
-
-`include`/`exclude` accept:
-- single scalar/hash (treated as one entry),
-- delimited string (split using `pagination.split`),
-- array of filter definitions.
-
-Each entry can itself be a scalar, scalar hash, range hash, array, delimited string, or another group hash (recursive).
-
-Example recursive definition:
-
-```yaml
-filters:
-  category:
-    include:
-      - /^s/
-      - include:
-          min: 5
-      - exclude: bob, jane
-        join: or
-    join: and
-```
-
-### Shortcut Forms (Per Key)
-
-These are all shortcuts to the longhand group above with `join: or`.
-
-1. Scalar shortcut
-
-```yaml
-filters:
-  category: news
-```
-
-Equivalent to:
-
-```yaml
-filters:
-  category:
-    include:
-      - match: news
-        mode: auto
-        split: true
-    join: or
-```
-
-2. Scalar hash shortcut (`match` / `mode` / `split` / `first`)
-
-```yaml
-filters:
+  category: news # frontmatter 'category' must be, or include, 'news'
+  product: /^sh/ # 'product' must start with 'sh' (any regex allowed)
   name:
-    match: cat
-    mode: strict # strict | auto | only | first | firstN (default: auto)
-    split: false # true|false|<non-empty delimiter string>
-    first: 2 # only used by first/firstN modes, default 1
-```
-
-3. Range hash shortcut (`min` / `max`)
-
-```yaml
-filters:
+    match: cat # name must match 'cat'
+    mode: auto # match mode (see below)
+    split: true # whether/how to convert value to array
   rating:
-    min: 3
-    max: 5
+    min: 3 # minimum numeric value (optional)
+    max: 5 # maximum numeric value (optional)
+  tags: [news, blog] # 'tags' must be or include 'news' or 'blog'. Array elements can be any definition form.
+  key:
+    include: [news, /^s/] 'key' should match filters in array
+    join: and # filters in array should all match
+    exclude: internal # 'key' cannot be 'internal'
 ```
 
-4. Delimited string shortcut
+- Match mode can be:
+  - `strict` frontmatter key must match exactly
+  - `auto` (default): frontmatter either matches exactly, or is an array, and contains the match
+  - `only`: like `auto` but if array, must be the only array item
+  - `first`/`firstN` (e.g. `first3`): like `auto` but if array, only the first (N) array elements are considered
+- The `split` option overrides `split` from global config, for this filter only. Set this to `false` to disable splitting of the frontmatter value.
+- Range matches are inclusive; `min`/`max` can be numeric, datetime, or now-relative string (`now`, `now+1`, `now-1`, etc.). The `now` keyword is configurable at `pagination.keywords.now`.
+- A synthetic `collection` frontmatter key is available to match on the document's collection label.
+- Arrays can be specified as delimited strings.
 
-```yaml
-filters:
-  category: news,blog,updates
-```
-
-Equivalent to array shortcut with one scalar definition per split entry.
-
-5. Array shortcut
-
-```yaml
-filters:
-  category: [news, blog]
-```
-
-Equivalent to `include: [news, blog], join: or`.
-
-### Scalar Hash Behaviour
-
-- `match`: scalar definition to match (supports regex literal strings like `/^a/i`).
-- `mode`:
-  - `strict`: direct equality only.
-  - `auto`: direct equality, or array includes.
-  - `only`: like `auto`, but includes passes only when the array length is exactly `1`.
-  - `first`: compare only against the first `N` entries in an array (`N` defaults to `1`).
-  - `firstN`: same as `first`; use `first` to set `N`.
-- `first`:
-  - positive integer count used by `first`/`firstN`.
-  - if omitted, defaults to `1`.
-- `split`:
-  - `true` (default): split compared string values using `pagination.split`.
-  - `false`: do not split compared values.
-  - non-empty string: override split delimiter for this scalar definition.
-
-Splitting always trims and rejects blank elements.
-
-### Range Behaviour
-
-- `min` and/or `max` are supported (at least one required).
-- Matching is inclusive (`>= min`, `<= max`).
-- Numeric bounds are compared as floats when both ends are numeric.
-- Date/time bounds support configured now keyword via `pagination.keywords.now`:
-  - `now`
-  - `now+1`, `now - 1`, `now + 0.5`
-- If both bounds are present and `min > max`, they are swapped and a warning is logged.
-
-### Matching and Key Resolution Notes
-
-- Nested keys use `pagination.nested_key_separator` (`.` by default), e.g. `author.name`.
-- Nested lookup traverses arrays at any path segment and collects all matching terminal values.
-- Example: `links.products.category.name` over nested arrays resolves to a flat set like `[shoe, sandal, bag, leather]`.
-- Equivalent keys in `pagination.equivalents` are respected during lookup.
-- A synthetic `collection` key is also available for filtering by item collection label.
-- Matching is path-wide, not branch-correlated across keys. Different filter keys can match values from different branches in the same item.
-- Item values are normalised before matching:
-  - arrays are flattened,
-  - strings are not auto-split unless a scalar definition has `split` enabled,
-  - empty values are removed.
-- Invalid key definitions are ignored (that key is skipped). If `filters` itself is not a hash, no filtering is applied.
 
 ## Sorting
 
-`sort` supports multi-level sort definitions:
+`sort` determines the sort order of paginated items. It supports multi-level sort definitions:
 
 ```yaml
 pagination:
@@ -299,73 +170,102 @@ pagination:
     - date desc
 ```
 
-Syntax per entry: `field [options]`
+The syntax is `field [options]`. `sort` doesn't have to be an array, a single sort field can just be a string directly.
 
 Options:
 
-- direction: `asc`/`ascending` or `desc`/`descending`
-- empty handling: `empty:first` or `empty:last`
+- direction: `asc`/`ascending` (default) or `desc`/`descending`
+- empty handling: `empty:first` or `empty:last` (default) specifies how to handle items that lack that frontmatter entirely
 
-Legacy `sort_field` and `sort_reverse` are up-migrated in compatibility mode.
 
-## Generated Templates (`pagination.templates.generate`)
+## Generated Templates
 
-Automatically generate pagination templates from frontmatter values:
+This feature automatically generates templates by indexing frontmatter values. This is based on the "AutoPages" feature from V2.
 
 ```yaml
 pagination:
   templates:
     location: pages
     generate:
-      - items: posts
-        index: tag
-        layout: autopage_tags.html
+      - items: posts # Search Format: what items to consider
+        index: tag # what frontmatter keys to index
+        #filters: # optionally filter those items (same format as pagination filters)
+        layout: tags.html
         permalink: /tag/:tag/
-        title: 'Posts tagged :tag'
-
+        title: 'Posts tagged :tag' # placeholders for the indexed keys
       - items: products
-        index: category, subcategory
-        layouts: [autopage_category.html]
-        filter: /^s/
-        frontmatter:
+        index: category, subcategory # multi-level indexing
+        filter: /^s/ # singular 'filter' is a shorthand to apply filter to the indexed frontmatter key(s)
+        layouts: [autopage_category.html] # multiple layouts
+        frontmatter: # add arbitrary frontmatter
           section: catalogue
+        #location: # override whether this generated template will be in 'pages' or a collection name
 ```
 
-Important behaviour:
+The generator will look in all the items you've identified and index them by the values in the frontmatter key(s) you specify on `index`.
 
-- `index` may be single or multi-level.
-- `filter` is shorthand for applying the same per-key filter definition signature to each indexed key; if `filters.<key>` is explicitly set, that explicit key filter takes precedence.
-- generated templates include `pagination.enabled: true` and are then expanded into indexes by the core generator.
-- generated templates can be created as pages or collection docs via `location`.
-- placeholders in generated `permalink`/`title` include each indexed key (for example `:owner.name`).
+For instance if you look in `posts` and index on `tags`, it might find posts with the tags "cat" and "dog". It will create a pagination template for "cat" and "dog", each of which will paginate posts with the tags "cat" and "dog" respectively.
+
+
+## Search Format
+
+A number of config keys require that you specify "where to look". These all accept the same format:
+
+1. String: `pages`, a collection label like `posts`, `all`, `everything`
+2. Hash: `{ posts: '*' }`, `{ pages: 'blog/*' }`
+3. Array of the above (look in several places) (can be delimited string)
+
+| Option | Effect |
+| ------ | ------ |
+| `pages` | Look in site pages |
+| Collection label | Look in the documents of that collection |
+| `all` | Look in the documents of all collections |
+| `everything` | `pages` + `all` |
+
+The special keywords `pages`, `all` and `everything` can be changed with the `pagination.keywords` config (in case you have a collection called "all", for instance).
+
+In the hash form, the hash key is one of the strings above, and the value is a glob pattern. Only file paths that match the glob pattern will be looked at.
+
+
+## Delimiters
+
+In several places where config expects an array, you are allowed to specify the array as a delimited string. The default delimiter is `,`, however you can change this with the config `pagination.delimiter`.
+
+When filtering items, by default, frontmatter values are also split on the delimiter to treat them as arrays. This can be disabled per filter.
+
+## Nested Keys
+
+Wherever you need to specify a frontmatter key, you can access nested keys using a separator. By default this is `.`, so `product.name` accesses the `name` key under the `product` key.
+
+The nested access format will also read across complex arrays, mapping them as needed. For instance:
+
+```yaml
+data:
+  categories:
+  - name: Shoes
+    size: 34
+  - name: Coats
+    size: 12
+```
+
+`data.categories.size` would access the array `[34, 12]`.
+
+The separator `.` can be changed to a different string using the config `pagination.nested_key_separator`.
+
+
+## Equivalents
+
+
+
 
 ## Compatibility
 
-Compatibility modes are migration helpers, not separate engines. The intended flow is:
+Set `pagination: compatibility: v1` or `v2` in your site config to enable compatibility mode for prior Jekyll Pagination gems. This does not guarantee that behaviour will be identical to those old gems, but it will do its best to read your existing config and interpret it correctly. Migrate your config and approach to match this gem's expectations when you can.
 
-1. existing site is on jekyll-paginate (v1) or jekyll-paginate-v2
-2. install `jekyll-paginate-v3`
-3. set `pagination.compatibility: v1` or `pagination.compatibility: v2`
-4. existing pagination continues to work with little or no config rewrite, while you gradually adopt native v3 config and later remove compatibility mode
 
-### `compatibility: v2`
+## Paginator
 
-- keeps v2-style paginator payload naming by default (`paginator.posts`),
-- up-migrates legacy shortcut keys (`collection`, `category`, `tag`, `locale`),
-- up-migrates old AutoPages config (`site.autopages`) into `pagination.templates.generate`.
-
-### `compatibility: v1`
-
-- reads `paginate` and `paginate_path` and up-migrates them into v3 config,
-- keeps pagination on the standard v3 pipeline (templates, filters, sorting, trails, output model),
-- defaults template discovery to `pagination.templates.location: pages`,
-- if legacy `paginate` config is present and no explicit `pagination.enabled: true` template exists, automatically selects the legacy `index.html` hierarchy candidate as an implicit template.
-
-If `paginate` is present but compatibility is unset, v1 compatibility is auto-enabled with a warning.
-
-## Paginator Payload
-
-`page.paginator` (and `paginator` in templates) includes:
+`page.paginator` is available on the index pages that are generated. This has the following properties:
 
 - `items`, `total_items`
 - `page`, `per_page`, `total_pages`
@@ -375,15 +275,16 @@ If `paginate` is present but compatibility is unset, v1 compatibility is auto-en
 - `last_page`, `last_page_path`
 - `page_trail`
 
-If `pagination.keywords.items` is changed (for example to `posts`), matching aliases are also included (`posts`, `total_posts`).
+The term "items" to refer to the items being paginated can be changed with the `pagination.keywords.items` config entry. For instance, in V2 the term was "posts".
+
 
 ## Notes
 
-- Hidden content (`hidden: true`) is excluded from pagination items.
-- Templates are never included in their own paginated item sets.
-- Generated indexes are marked with `page.pagination.generated: true` (and in `compatibility: v2` they also set `page.autogen: jekyll-paginate-v2`).
+- Hidden content (`hidden: true`) is always excluded from pagination items.
+- Index pages are never included in paginated item sets.
+- Indexes generated from generated templates are marked with `page.pagination.generated: true`.
 
 
 ## Acknowledgements
 
-This gem drew heavy inspiration from the [jekyll-paginate-v2](https://github.com/sverrirs/jekyll-paginate-v2) gem which itself was based on the original design of [jekyll-paginate](https://github.com/jekyll/jekyll-paginate).
+This gem drew heavy inspiration, and a good chunk of code, from the [jekyll-paginate-v2](https://github.com/sverrirs/jekyll-paginate-v2) gem which itself was based on the original design of [jekyll-paginate](https://github.com/jekyll/jekyll-paginate).

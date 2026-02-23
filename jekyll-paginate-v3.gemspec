@@ -22,11 +22,11 @@ Gem::Specification.new do |spec|
   spec.files = Dir['lib/**/*.rb'] + %w[README.md]
   spec.require_paths = ['lib']
 
-  spec.required_ruby_version = '>= 2.5.0'
+  spec.required_ruby_version = '>= 2.4.0'
+  spec.required_rubygems_version = ">= 2.7.0"
 
-  spec.add_dependency 'jekyll', '>= 3.8', '< 5.0'
+  spec.add_dependency 'jekyll', '>= 3.8.5', '< 5.0'
 
-  spec.add_development_dependency 'bundler', '>= 2.4', '< 5.0'
   spec.add_development_dependency 'pry', '~> 0.14'
   spec.add_development_dependency 'pry-byebug', '~> 3.10'
   spec.add_development_dependency 'rspec', '~> 3.13'
