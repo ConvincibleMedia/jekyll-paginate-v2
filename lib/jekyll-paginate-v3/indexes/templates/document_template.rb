@@ -15,10 +15,11 @@ module Jekyll
             alias_method :ext, :extname
 
             # Creates an in-memory collection document seeded from a layout file.
-            def initialize(site:, collection:, layout_name:, pagination_config:, frontmatter:, token_values:)
+            def initialize(site:, collection:, layout_name:, pagination_config:, frontmatter:, generated_metadata:)
               layout_path = resolve_layout_path(site, layout_name)
               parsed_layout = parse_layout(layout_path)
-              virtual_path = File.join(site.source, collection.relative_directory, "_paginate_v3_#{Digest::MD5.hexdigest([layout_name, token_values.sort.to_h.to_s].join(':'))}.md")
+              token_signature = Utils.safe_hash(generated_metadata['tokens']).sort.to_h.to_s
+              virtual_path = File.join(site.source, collection.relative_directory, "_paginate_v3_#{Digest::MD5.hexdigest([layout_name, token_signature].join(':'))}.md")
 
               initialise_document(site, collection, virtual_path)
 
@@ -27,15 +28,30 @@ module Jekyll
               self.content = parsed_layout['content']
               self.data['layout'] = File.basename(layout_name, File.extname(layout_name))
               self.data['pagination'] = Jekyll::Utils.deep_merge_hashes(pagination_config, Utils.safe_hash(parsed_layout['data']['pagination']))
-              self.data['paginate_v3'] = {
-                'generated_index' => true,
-                'tokens' => token_values
-              }
+              self.data['paginate_v3'] = Utils.safe_hash(generated_metadata)
+              self.data['autogen'] = 'jekyll-paginate-v3'
+
+              apply_compatibility_metadata!
 
               trigger_hooks(:post_init)
             end
 
             private
+
+            # Adds legacy-friendly fields for generated index documents so
+            # templates can access `page.autopages.display_name` and key values.
+            def apply_compatibility_metadata!
+              autopage_data = Utils.safe_hash(data.dig('paginate_v3', 'autopages'))
+              return if autopage_data.empty?
+
+              data['autopages'] = autopage_data
+              key = autopage_data['key'].to_s
+              return if key.empty?
+              return if key == 'collection'
+              return if key.include?('.') || key.include?(':')
+
+              data[key] = autopage_data['value']
+            end
 
             # Resolves layout path from theme first, then site source.
             def resolve_layout_path(site, layout_name)

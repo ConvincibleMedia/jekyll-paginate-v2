@@ -1,17 +1,16 @@
-# jekyll-paginate-v3
+# Jekyll Paginate V3
 
 Robust, highly configurable pagination for Jekyll.
 
-`jekyll-paginate-v3` can:
+* Paginate any content source (pages, one collection, many collections, all collections, or everything).
+* Filter on any frontmatter key (including nested keys).
+* Generate index pages automatically from frontmatter values.
 
-- paginate any content source (pages, one collection, many collections, all collections, or everything),
-- filter on any frontmatter key (including nested keys),
-- generate index pages automatically from frontmatter values,
-- run in compatibility modes for v2 and v1 behaviour.
+Compatibility modes for (https://github.com/jekyll/jekyll-paginate)-v1 and [jekyll-paginate-v2 ](https://github.com/sverrirs/jekyll-paginate-v2)are also included.
 
-## Installation
+## Quickstart
 
-Add the gem to your Jekyll site:
+Include the plugin in your project:
 
 ```ruby
 # Gemfile
@@ -20,34 +19,27 @@ group :jekyll_plugins do
 end
 ```
 
-Then add it to `_config.yml`:
+Enable pagination in your site config (you can also configure how it works, here):
 
 ```yaml
-plugins:
-  - jekyll-paginate-v3
-```
-
-## Quick Start
-
-`_config.yml`:
-
-```yaml
+# _config.yml
 pagination:
   enabled: true
 ```
 
-`index.md`:
+Create index pages that should include pagination, specifying what they paginate:
 
 ```yaml
+# post-index.md - example
 ---
-layout: home
+layout: post-listing
 pagination:
   enabled: true
   items: posts
 ---
 ```
 
-Template usage:
+Then on the layouts that your index pages use:
 
 ```liquid
 {% for item in paginator.items %}
@@ -63,47 +55,44 @@ Template usage:
 {% endif %}
 ```
 
-## Site Configuration
+## Configuration
 
 ```yaml
 pagination:
-  enabled: false
-  compatibility: # optional: v2 or v1
+  enabled: false # global disable
 
-  nested_key_separator: '.' # or ':'
+  # Pagination settings - setting them here sets these as defaults for all index pages
+  items: posts # what to paginate
+  filters: [] # filter which pages to include in pagination
 
-  keywords:
-    pages: pages
-    all: all
-    everything: everything
-    items: items # set to posts for v2-style payload
+  per_page: 10 # how many items per page
+  offset: 0 # skip first x items
+  limit: 0 # paginate no more than x items
+  trail:
+    before: 0
+    after: 0
 
-  equivalents:
-    - [tag, tags]
-    - [category, categories]
-
-  items: posts
-  filters: {}
-
-  per_page: 10
-  offset: 0
-  limit: 0
-
-  sort:
-    - date desc
+  sort: date desc # how to sort paginated items
 
   permalink: /page/:num/
   title: ':title - page :num'
   indexpage: index
   extension: html
 
-  trail:
-    before: 0
-    after: 0
-
   indexes:
     location: pages
     generate: []
+
+  compatibility: # optional: v2 or v1
+  nested_key_separator: '.' # or ':'
+  keywords:
+    pages: pages
+    all: all
+    everything: everything
+    items: items # set to posts for v2-style payload
+  equivalents:
+    - [tag, tags]
+    - [category, categories]
 ```
 
 ## Index Pages (Pagination Templates)
@@ -243,3 +232,8 @@ If `pagination.keywords.items` is changed (for example to `posts`), matching ali
 - Hidden content (`hidden: true`) is excluded from pagination items.
 - Index pages are never included in their own paginated item sets.
 - Generated pagination pages after page 1 are marked with `page.autogen: jekyll-paginate-v3`.
+
+
+## Acknowledgements
+
+This gem drew heavy inspiration from the [jekyll-paginate-v2](https://github.com/sverrirs/jekyll-paginate-v2) gem which itself was based on the original design of [jekyll-paginate](https://github.com/jekyll/jekyll-paginate).

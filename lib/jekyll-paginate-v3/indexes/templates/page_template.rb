@@ -11,7 +11,7 @@ module Jekyll
           # Used by Indexes::Builder for generated page-based index templates.
           class PageTemplate < Jekyll::Page
             # Creates an in-memory page that behaves like a hand-authored index.
-            def initialize(site:, layout_name:, pagination_config:, frontmatter:, token_values:)
+            def initialize(site:, layout_name:, pagination_config:, frontmatter:, generated_metadata:)
               @site = site
               @base = site.source
               @name = 'index.html'
@@ -30,10 +30,10 @@ module Jekyll
               self.data = Jekyll::Utils.deep_merge_hashes(frontmatter, layout_data)
               self.data['layout'] = File.basename(layout_name, File.extname(layout_name))
               self.data['pagination'] = Jekyll::Utils.deep_merge_hashes(pagination_config, Utils.safe_hash(layout_data['pagination']))
-              self.data['paginate_v3'] = {
-                'generated_index' => true,
-                'tokens' => token_values
-              }
+              self.data['paginate_v3'] = Utils.safe_hash(generated_metadata)
+              self.data['autogen'] = 'jekyll-paginate-v3'
+
+              apply_compatibility_metadata!
 
               apply_permalink!
 
@@ -43,6 +43,21 @@ module Jekyll
             end
 
             private
+
+            # Adds legacy-friendly fields for generated index pages so existing
+            # templates can access `page.autopages.display_name` and key values.
+            def apply_compatibility_metadata!
+              autopage_data = Utils.safe_hash(data.dig('paginate_v3', 'autopages'))
+              return if autopage_data.empty?
+
+              data['autopages'] = autopage_data
+              key = autopage_data['key'].to_s
+              return if key.empty?
+              return if key == 'collection'
+              return if key.include?('.') || key.include?(':')
+
+              data[key] = autopage_data['value']
+            end
 
             # Applies frontmatter permalink directly so the synthetic template
             # lands at the intended route before pagination expansion.

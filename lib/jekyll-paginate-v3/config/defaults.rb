@@ -51,11 +51,15 @@ module Jekyll
         # v1 enables strict legacy behaviour handled by Compatibility::V1::Utils.
         COMPATIBILITY_PROFILES = {
           'v2' => {
-            'enabled' => false,
+            'enabled' => true,
             'nested_key_separator' => ':',
             'keywords' => {
               'all' => 'collections',
               'items' => 'posts'
+            },
+            'trail' => {
+              'before' => 2,
+              'after' => 2
             }
           },
           'v1' => {

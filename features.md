@@ -32,10 +32,6 @@ This document combines:
 ### 3.2 Template Discovery
 
 1. Standard behaviour: paginate pages/docs that have `pagination.enabled: true`.
-2. **Undocumented:** discovery is configurable via `pagination.search`.
-3. `search` can target `pages`, named collections, or collection catch-alls (`all`, `collections`).
-4. Search supports path wildcard patterns (`*`) and multiple path patterns per type.
-5. Search can include collection documents as pagination templates, not only regular pages.
 
 ### 3.3 Content Sources
 
@@ -48,11 +44,6 @@ This document combines:
 
 1. Documented filter keys: category, tag, locale.
 2. Legacy keys (`category`, `tag`, `locale`) are migrated into a `filters` hash internally.
-3. **Undocumented/intended:** `filters` appears to support richer expressions than README examples, including:
-4. String lists (comma/semicolon separated).
-5. Regex-like syntax.
-6. Numeric/date-like value parsing.
-7. Range-style hash filters (`min`/`max`).
 
 ### 3.5 Sorting, Offsetting, and Limits
 

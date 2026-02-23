@@ -15,17 +15,29 @@ module Jekyll
             'tags' => {
               'layout' => 'autopage_tags.html',
               'title' => 'Posts tagged with :tag',
-              'permalink' => '/tag/:tag'
+              'permalink' => '/tag/:tag',
+              'slugify' => {
+                'mode' => 'default',
+                'cased' => false
+              }
             },
             'categories' => {
               'layout' => 'autopage_category.html',
               'title' => 'Posts in category :cat',
-              'permalink' => '/category/:cat'
+              'permalink' => '/category/:cat',
+              'slugify' => {
+                'mode' => 'default',
+                'cased' => false
+              }
             },
             'collections' => {
               'layout' => 'autopage_collection.html',
               'title' => 'Posts in collection :coll',
-              'permalink' => '/collection/:coll'
+              'permalink' => '/collection/:coll',
+              'slugify' => {
+                'mode' => 'default',
+                'cased' => false
+              }
             }
           }.freeze
 
@@ -275,13 +287,23 @@ module Jekyll
               permalink = group['permalink']
               permalink = defaults['permalink'] unless present_config_value?(permalink)
 
+              slugify = if group.key?('slugify')
+                          Utils.safe_hash(group['slugify'])
+                        else
+                          Utils.deep_copy(defaults['slugify'])
+                        end
+
+              silent = boolean_config_value(group['silent'])
+
               [
                 {
                   'items' => items,
                   'index' => index_key,
                   'layouts' => layouts,
                   'title' => title,
-                  'permalink' => permalink
+                  'permalink' => permalink,
+                  'slugify' => slugify,
+                  'silent' => silent
                 }
               ]
             end
@@ -294,6 +316,13 @@ module Jekyll
               return false if value.is_a?(Hash) && value.empty?
 
               true
+            end
+
+            # Coerces loose truthy/falsey config values to a strict boolean.
+            def boolean_config_value(value)
+              return value if value == true || value == false
+
+              value.to_s.strip.casecmp('true').zero?
             end
           end
         end

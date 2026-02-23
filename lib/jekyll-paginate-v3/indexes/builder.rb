@@ -12,7 +12,7 @@ module Jekyll
         #
         # Used by Pagination::Model before normal page pagination starts.
         class Builder
-          SPECIAL_KEYS = %w[items index filter filters layout layouts location frontmatter permalink title].freeze
+          SPECIAL_KEYS = %w[items index filter filters layout layouts location frontmatter permalink title slugify silent].freeze
 
           def initialize(site:, site_config:, add_item_lambda:, resolve_items_lambda:, log_lambda:)
             @site = site
@@ -74,9 +74,10 @@ module Jekyll
 
           # Builds a single template object for one index value tuple and layout.
           def build_template(definition, entry, layout_name)
-            token_map = build_token_map(definition['index'], entry['values'])
+            token_map = build_token_map(definition['index'], entry['values'], slugify_config: definition['slugify'])
             generated_permalink = Utils.replace_tokens(definition['permalink'], token_map)
             generated_title = Utils.replace_tokens(definition['title'], token_map)
+            generated_metadata = build_generated_metadata(definition['index'], entry['values'], token_map)
 
             generated_frontmatter = Utils.deep_copy(definition['frontmatter'])
             generated_frontmatter['title'] = generated_title unless generated_title.nil? || generated_title.empty?
@@ -93,12 +94,12 @@ module Jekyll
                 layout_name: layout_name,
                 pagination_config: pagination_config,
                 frontmatter: generated_frontmatter,
-                token_values: entry['values']
+                generated_metadata: generated_metadata
               )
             else
               collection = @site.collections[definition['location']]
               if collection.nil?
-                @log_lambda.call("Skipping generated index in unknown collection '#{definition['location']}'.", 'warn')
+                @log_lambda.call("Skipping generated index in unknown collection '#{definition['location']}'.", 'warn') unless definition['silent']
                 return nil
               end
 
@@ -108,11 +109,11 @@ module Jekyll
                 layout_name: layout_name,
                 pagination_config: pagination_config,
                 frontmatter: generated_frontmatter,
-                token_values: entry['values']
+                generated_metadata: generated_metadata
               )
             end
           rescue StandardError => error
-            @log_lambda.call("Unable to generate index template from layout '#{layout_name}': #{error.message}", 'warn')
+            @log_lambda.call("Unable to generate index template from layout '#{layout_name}': #{error.message}", 'warn') unless definition['silent']
             nil
           end
 
@@ -184,16 +185,17 @@ module Jekyll
           def normalise_definition(raw_definition, default_location)
             definition = Utils.safe_hash(raw_definition)
             return nil if definition.empty?
+            silent = normalise_boolean(definition['silent'])
 
             index_keys = Utils.comma_delimited_array(definition['index'])
             if index_keys.empty?
-              @log_lambda.call('Skipping generated index config with missing `index` key.', 'warn')
+              @log_lambda.call('Skipping generated index config with missing `index` key.', 'warn') unless silent
               return nil
             end
 
             layouts = Utils.normalise_layouts(definition)
             if layouts.empty?
-              @log_lambda.call('Skipping generated index config with no `layout`/`layouts` value.', 'warn')
+              @log_lambda.call('Skipping generated index config with no `layout`/`layouts` value.', 'warn') unless silent
               return nil
             end
 
@@ -211,6 +213,8 @@ module Jekyll
               'frontmatter' => Utils.safe_hash(definition['frontmatter']),
               'permalink' => definition['permalink'].to_s,
               'title' => definition['title'].to_s,
+              'slugify' => normalise_slugify_config(definition['slugify']),
+              'silent' => silent,
               'pagination_overrides' => extract_pagination_overrides(definition)
             }
           end
@@ -247,14 +251,21 @@ module Jekyll
 
           # Builds placeholder values used by generated `permalink` and `title`
           # strings.
-          def build_token_map(index_keys, values)
+          def build_token_map(index_keys, values, slugify_config:)
             token_map = {}
 
             index_keys.each do |key|
               value = values[key]
-              token_map[key] = Jekyll::Utils.slugify(value.to_s)
+              token_map[key] = slugify_value(value, slugify_config)
             end
 
+            apply_legacy_token_aliases!(token_map, index_keys)
+            token_map
+          end
+
+          # Applies v2 legacy token aliases (`:coll`, `:cat`, `:tag`) for
+          # generated title/permalink placeholders.
+          def apply_legacy_token_aliases!(token_map, index_keys)
             if @compatibility_mode == 'v2'
               if index_keys.include?('collection')
                 token_map['coll'] = token_map['collection']
@@ -268,8 +279,59 @@ module Jekyll
                 token_map['tag'] = token_map['tag'] || token_map['tags']
               end
             end
+          end
 
-            token_map
+          # Normalises slugify config accepted on `indexes.generate[]`.
+          # Supports both `slugify.case` and `slugify.cased`.
+          def normalise_slugify_config(raw_slugify)
+            slugify = Utils.safe_hash(raw_slugify)
+            mode = slugify['mode'].to_s.strip
+            mode = 'default' if mode.empty?
+
+            cased = if slugify.key?('cased')
+                      normalise_boolean(slugify['cased'])
+                    else
+                      normalise_boolean(slugify['case'])
+                    end
+
+            {
+              'mode' => mode,
+              'cased' => cased
+            }
+          end
+
+          # Slugifies one token value according to an index definition.
+          def slugify_value(value, slugify_config)
+            mode = slugify_config['mode']
+            cased = slugify_config['cased']
+            Jekyll::Utils.slugify(value.to_s, mode: mode, cased: cased)
+          end
+
+          # Coerces loose truthy/falsey config values to a strict boolean.
+          def normalise_boolean(value)
+            return value if value == true || value == false
+
+            value.to_s.strip.casecmp('true').zero?
+          end
+
+          # Captures generated-index metadata for compatibility and template use.
+          def build_generated_metadata(index_keys, raw_values, token_map)
+            metadata = {
+              'generated_index' => true,
+              'index_keys' => index_keys,
+              'tokens' => Utils.deep_copy(raw_values)
+            }
+
+            if index_keys.length == 1
+              key = index_keys.first
+              metadata['autopages'] = {
+                'key' => key,
+                'value' => token_map[key],
+                'display_name' => raw_values[key].to_s
+              }
+            end
+
+            metadata
           end
         end
       end
