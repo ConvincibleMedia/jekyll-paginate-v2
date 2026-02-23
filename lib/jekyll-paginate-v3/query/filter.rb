@@ -572,8 +572,9 @@ module Jekyll
             return [] if segments.empty?
 
             nodes = [data]
-            segments.each_with_index do |segment, segment_index|
+            segments.each_with_index do |_, segment_index|
               next_nodes = []
+              requested_key_path = segments.first(segment_index + 1).join(@nested_separator.to_s)
 
               nodes.each do |node|
                 if node.is_a?(Array)
@@ -582,7 +583,7 @@ module Jekyll
                 end
                 next unless node.is_a?(Hash)
 
-                resolved_key = Utils.resolve_hash_key(node, segment, @equivalent_lookup)
+                resolved_key = Utils.resolve_hash_key(node, requested_key_path, @equivalent_lookup, separator: @nested_separator)
                 next if resolved_key.nil?
 
                 next_nodes << Utils.read_hash(node, resolved_key)

@@ -115,5 +115,69 @@ RSpec.describe 'Pagination integration: sorting behaviour' do
       expect(paginator_item_titles(page_by_url(site, '/'))).to eq(['Post 02', 'Post 03', 'Post 01'])
     end
   end
+
+  it 'scopes equivalent keys to full nested key paths when sorting' do
+    files = post_files(3) do |index|
+      case index
+      when 1 then { 'product' => { 'tags' => 'b' } }
+      when 2 then { 'product' => { 'tag' => 'a' } }
+      else { 'product' => { 'tag' => 'c' } }
+      end
+    end
+    files = jekyll_merge(
+      files,
+      jekyll_files do
+        file 'index.md' do
+          frontmatter(
+            pagination_template_frontmatter(
+              {
+                'pagination' => {
+                  'enabled' => true,
+                  'items' => 'posts',
+                  'per_page' => 50,
+                  'sort' => [
+                    'product.tag asc empty:last',
+                    'title asc'
+                  ]
+                }
+              }
+            )
+          )
+          contents('Template content')
+        end
+      end
+    )
+
+    jekyll_build(
+      default_site,
+      config: {
+        'pagination' => {
+          'enabled' => true,
+          'equivalents' => [
+            %w[tag tags]
+          ]
+        }
+      },
+      files: files
+    ) do |site,|
+      expect(paginator_item_titles(page_by_url(site, '/'))).to eq(['Post 02', 'Post 03', 'Post 01'])
+    end
+
+    jekyll_build(
+      default_site,
+      config: {
+        'pagination' => {
+          'enabled' => true,
+          'equivalents' => [
+            %w[tag tags],
+            ['product.tag', 'product.tags']
+          ]
+        }
+      },
+      files: files
+    ) do |site,|
+      expect(paginator_item_titles(page_by_url(site, '/'))).to eq(['Post 02', 'Post 01', 'Post 03'])
+    end
+  end
 end
 

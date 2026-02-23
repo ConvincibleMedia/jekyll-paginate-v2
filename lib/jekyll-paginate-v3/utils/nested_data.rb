@@ -14,6 +14,9 @@ module Jekyll
         end
 
         # Builds lookup table used for equivalent key resolution.
+        # Each entry is keyed by full key-path string (for example
+        # `product.tag`), which allows equivalent mappings to be scoped to one
+        # nested level only.
         def self.build_equivalent_lookup(raw_equivalents, split_delimiter: ',')
           return {} if raw_equivalents == false || raw_equivalents.nil?
 
@@ -34,12 +37,18 @@ module Jekyll
           lookup
         end
 
-        # Resolves the effective hash key for a requested key.
-        def self.resolve_hash_key(hash, requested_key, equivalent_lookup)
-          string_key = requested_key.to_s
-          group = equivalent_lookup[string_key] || [string_key]
+        # Resolves the effective hash key for one requested nested key path.
+        # Equivalent lookups are performed using the full requested path; only
+        # terminal segments from that matched group are candidates for hash
+        # access at this level.
+        def self.resolve_hash_key(hash, requested_key_path, equivalent_lookup, separator: '.')
+          string_key_path = requested_key_path.to_s.strip
+          return nil if string_key_path.empty?
 
-          group.reverse_each do |candidate|
+          group = equivalent_lookup[string_key_path] || [string_key_path]
+          candidate_segments = group.map { |candidate_path| split_nested_key(candidate_path, separator).last }.reject(&:empty?).uniq
+
+          candidate_segments.reverse_each do |candidate|
             return candidate if hash.key?(candidate)
             symbol_candidate = candidate.to_sym
             return symbol_candidate if hash.key?(symbol_candidate)
@@ -69,8 +78,9 @@ module Jekyll
           return [] if segments.empty?
 
           nodes = [data]
-          segments.each do |segment|
+          segments.each_with_index do |_, segment_index|
             next_nodes = []
+            requested_key_path = segments.first(segment_index + 1).join(separator.to_s)
 
             nodes.each do |node|
               if node.is_a?(Array)
@@ -79,7 +89,7 @@ module Jekyll
               end
               next unless node.is_a?(Hash)
 
-              resolved_key = resolve_hash_key(node, segment, equivalent_lookup)
+              resolved_key = resolve_hash_key(node, requested_key_path, equivalent_lookup, separator: separator)
               next if resolved_key.nil?
 
               next_nodes << read_hash(node, resolved_key)

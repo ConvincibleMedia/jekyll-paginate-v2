@@ -216,6 +216,70 @@ RSpec.describe 'Pagination integration: filter semantics' do
     end
   end
 
+  it 'scopes equivalent keys to full nested key paths' do
+    files = post_files(3) do |index|
+      case index
+      when 1 then { 'product' => { 'tags' => ['ruby'] } }
+      when 2 then { 'product' => { 'tag' => 'ruby' } }
+      else { 'tags' => ['ruby'] }
+      end
+    end
+    files = jekyll_merge(
+      files,
+      jekyll_files do
+        file 'index.md' do
+          frontmatter(
+            pagination_template_frontmatter(
+              {
+                'pagination' => {
+                  'enabled' => true,
+                  'items' => 'posts',
+                  'sort' => 'title asc',
+                  'per_page' => 50,
+                  'filters' => {
+                    'product.tag' => 'ruby'
+                  }
+                }
+              }
+            )
+          )
+          contents('Template content')
+        end
+      end
+    )
+
+    jekyll_build(
+      default_site,
+      config: {
+        'pagination' => {
+          'enabled' => true,
+          'equivalents' => [
+            %w[tag tags]
+          ]
+        }
+      },
+      files: files
+    ) do |site,|
+      expect(paginator_item_titles(page_by_url(site, '/'))).to eq(['Post 02'])
+    end
+
+    jekyll_build(
+      default_site,
+      config: {
+        'pagination' => {
+          'enabled' => true,
+          'equivalents' => [
+            %w[tag tags],
+            ['product.tag', 'product.tags']
+          ]
+        }
+      },
+      files: files
+    ) do |site,|
+      expect(paginator_item_titles(page_by_url(site, '/'))).to eq(['Post 01', 'Post 02'])
+    end
+  end
+
   it 'supports an alternate nested key separator for filters' do
     files = post_files(2) do |index|
       index == 1 ? { 'author' => { 'name' => 'Alice' } } : { 'author' => { 'name' => 'Bob' } }

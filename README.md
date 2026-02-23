@@ -255,7 +255,9 @@ The separator `.` can be changed to a different string using the config `paginat
 
 ## Equivalents
 
+You can specify frontmatter keys that should be treated as the same frontmatter key. The `equivalents` config is an array of arrays, where the inner array is a set of frontmatter keys to treat as if equivalent.
 
+By default this is set so that `tag` and `tags` are treated as equivalent, as well as `category` and `categories`. So if you filter on either of these, it will be treated the same as filtering on the other.
 
 
 ## Compatibility
